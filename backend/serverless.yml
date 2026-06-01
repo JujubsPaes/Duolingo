@@ -1,0 +1,211 @@
+service: dualingo-backend
+
+# Framework serverless para deploy na AWS
+# Cada função Lambda é mapeada para um endpoint do API Gateway
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  environment:
+    DYNAMODB_TABLE: ${self:service}-${self:provider.stage}
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+  iam:
+    role:
+      statements:
+        # Permissões para acessar o DynamoDB
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - !GetAtt DualingoTable.Arn
+            - !Join ["", [!GetAtt DualingoTable.Arn, "/index/*"]]
+
+plugins:
+  - serverless-offline
+
+functions:
+  # ==========================================
+  # ADMIN - Cursos
+  # ==========================================
+  adminCreateCourse:
+    handler: dist/functions/admin/courses.create
+    events:
+      - http:
+          path: admin/courses
+          method: post
+          cors: true
+
+  adminUpdateCourse:
+    handler: dist/functions/admin/courses.update
+    events:
+      - http:
+          path: admin/courses/{id}
+          method: put
+          cors: true
+
+  adminDeleteCourse:
+    handler: dist/functions/admin/courses.remove
+    events:
+      - http:
+          path: admin/courses/{id}
+          method: delete
+          cors: true
+
+  adminListCourses:
+    handler: dist/functions/admin/courses.list
+    events:
+      - http:
+          path: admin/courses
+          method: get
+          cors: true
+
+  # ==========================================
+  # ADMIN - Módulos
+  # ==========================================
+  adminCreateModule:
+    handler: dist/functions/admin/modules.create
+    events:
+      - http:
+          path: admin/modules
+          method: post
+          cors: true
+
+  adminUpdateModule:
+    handler: dist/functions/admin/modules.update
+    events:
+      - http:
+          path: admin/modules/{id}
+          method: put
+          cors: true
+
+  adminDeleteModule:
+    handler: dist/functions/admin/modules.remove
+    events:
+      - http:
+          path: admin/modules/{id}
+          method: delete
+          cors: true
+
+  adminListModules:
+    handler: dist/functions/admin/modules.list
+    events:
+      - http:
+          path: admin/modules
+          method: get
+          cors: true
+
+  # ==========================================
+  # ADMIN - Lições
+  # ==========================================
+  adminCreateLesson:
+    handler: dist/functions/admin/lessons.create
+    events:
+      - http:
+          path: admin/lessons
+          method: post
+          cors: true
+
+  adminUpdateLesson:
+    handler: dist/functions/admin/lessons.update
+    events:
+      - http:
+          path: admin/lessons/{id}
+          method: put
+          cors: true
+
+  adminDeleteLesson:
+    handler: dist/functions/admin/lessons.remove
+    events:
+      - http:
+          path: admin/lessons/{id}
+          method: delete
+          cors: true
+
+  adminListLessons:
+    handler: dist/functions/admin/lessons.list
+    events:
+      - http:
+          path: admin/lessons
+          method: get
+          cors: true
+
+  # ==========================================
+  # ADMIN - Exercícios
+  # ==========================================
+  adminCreateExercise:
+    handler: dist/functions/admin/exercises.create
+    events:
+      - http:
+          path: admin/exercises
+          method: post
+          cors: true
+
+  adminUpdateExercise:
+    handler: dist/functions/admin/exercises.update
+    events:
+      - http:
+          path: admin/exercises/{id}
+          method: put
+          cors: true
+
+  adminDeleteExercise:
+    handler: dist/functions/admin/exercises.remove
+    events:
+      - http:
+          path: admin/exercises/{id}
+          method: delete
+          cors: true
+
+  adminListExercises:
+    handler: dist/functions/admin/exercises.list
+    events:
+      - http:
+          path: admin/exercises
+          method: get
+          cors: true
+
+  # ==========================================
+  # ADMIN - Relatórios
+  # ==========================================
+  adminReports:
+    handler: dist/functions/admin/reports.getReports
+    events:
+      - http:
+          path: admin/reports
+          method: get
+          cors: true
+
+# Recursos de infraestrutura (DynamoDB)
+resources:
+  Resources:
+    DualingoTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: GSI1
+            KeySchema:
+              - AttributeName: SK
+                KeyType: HASH
+              - AttributeName: PK
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL

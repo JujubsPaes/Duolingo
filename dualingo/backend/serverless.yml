@@ -1,0 +1,249 @@
+service: dualingo-backend
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  environment:
+    DYNAMODB_TABLE: duolingo-app
+    COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID}
+    COGNITO_CLIENT_ID: ${env:COGNITO_CLIENT_ID}
+    STAGE: ${self:provider.stage}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}/index/*
+        - Effect: Allow
+          Action:
+            - cognito-idp:AdminGetUser
+            - cognito-idp:AdminUpdateUserAttributes
+            - cognito-idp:InitiateAuth
+            - cognito-idp:SignUp
+            - cognito-idp:ForgotPassword
+          Resource: arn:aws:cognito-idp:${self:provider.region}:*:userpool/${self:provider.environment.COGNITO_USER_POOL_ID}
+
+plugins:
+  - serverless-plugin-typescript
+  - serverless-offline
+
+functions:
+  # ── Auth ──────────────────────────────────────────────────────────────────
+  register:
+    handler: src/functions/auth/register.handler
+    events:
+      - http:
+          path: /auth/register
+          method: post
+          cors: true
+
+  login:
+    handler: src/functions/auth/login.handler
+    events:
+      - http:
+          path: /auth/login
+          method: post
+          cors: true
+
+  forgotPassword:
+    handler: src/functions/auth/forgotPassword.handler
+    events:
+      - http:
+          path: /auth/forgot-password
+          method: post
+          cors: true
+
+  updateProfile:
+    handler: src/functions/auth/updateProfile.handler
+    events:
+      - http:
+          path: /auth/profile
+          method: put
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  # ── Cursos ────────────────────────────────────────────────────────────────
+  listCourses:
+    handler: src/functions/courses/list.handler
+    events:
+      - http:
+          path: /courses
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  getCourse:
+    handler: src/functions/courses/get.handler
+    events:
+      - http:
+          path: /courses/{id}
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  getModule:
+    handler: src/functions/courses/getModule.handler
+    events:
+      - http:
+          path: /courses/{id}/modules/{moduleId}
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  startCourse:
+    handler: src/functions/courses/start.handler
+    events:
+      - http:
+          path: /courses/{id}/start
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  # ── Lições ────────────────────────────────────────────────────────────────
+  getLesson:
+    handler: src/functions/lessons/get.handler
+    events:
+      - http:
+          path: /lessons/{id}
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  completeLesson:
+    handler: src/functions/lessons/complete.handler
+    events:
+      - http:
+          path: /lessons/{id}/complete
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  repeatLesson:
+    handler: src/functions/lessons/repeat.handler
+    events:
+      - http:
+          path: /lessons/{id}/repeat
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  # ── Progresso ─────────────────────────────────────────────────────────────
+  getProgress:
+    handler: src/functions/progress/get.handler
+    events:
+      - http:
+          path: /progress
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  getCourseProgress:
+    handler: src/functions/progress/getCourse.handler
+    events:
+      - http:
+          path: /progress/{courseId}
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  # ── Gamificação ───────────────────────────────────────────────────────────
+  getGamification:
+    handler: src/functions/gamification/get.handler
+    events:
+      - http:
+          path: /gamification
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  claimAchievement:
+    handler: src/functions/gamification/claimAchievement.handler
+    events:
+      - http:
+          path: /gamification/achievements/{id}/claim
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  getHistory:
+    handler: src/functions/gamification/history.handler
+    events:
+      - http:
+          path: /history
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  # ── Revisão Inteligente ───────────────────────────────────────────────────
+  getReviewSuggestions:
+    handler: src/functions/review/getSuggestions.handler
+    events:
+      - http:
+          path: /review/suggestions
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+  getReviewExercises:
+    handler: src/functions/review/getExercises.handler
+    events:
+      - http:
+          path: /review/exercises
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref CognitoAuthorizer
+
+resources:
+  Resources:
+    # Authorizer do Cognito para proteger as rotas
+    CognitoAuthorizer:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        Name: CognitoAuthorizer
+        Type: COGNITO_USER_POOLS
+        IdentitySource: method.request.header.Authorization
+        RestApiId: !Ref ApiGatewayRestApi
+        ProviderARNs:
+          - arn:aws:cognito-idp:${self:provider.region}:*:userpool/${self:provider.environment.COGNITO_USER_POOL_ID}

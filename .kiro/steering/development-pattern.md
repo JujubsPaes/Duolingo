@@ -1,0 +1,3 @@
+kiro, sempre desenvolva todo e qualquer código de maneira limpa, seguindo as normas de mercado para desenvolvimento e com comentários limpos e humanos, que não pareça IA.
+
+esse projeto vai servir como avaliação posteriormente e o professor vai pedir para a gente alterar alguma parte dele, então é importante que ele tenha o que o professor pediu, porém de maneira simples e clara. faça quantos comentários forem necessários no código fonte de maneira didática.
