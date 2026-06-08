@@ -90,6 +90,80 @@ export default function AchievementBadge({
   );
 }
 
+/* 1Estrutura geral do projeto Expo
+
+O projeto foi gerado com o Expo e utiliza o **Expo Router** como sistema de navegação baseado em arquivos. A organização segue a convenção de pastas do framework, onde a estrutura de diretórios reflete diretamente as rotas da aplicação.
+
+### Pastas principais
+
+```
+dualingo/
+├── app/                   ← Rotas da aplicação (Expo Router)
+│   ├── _layout.tsx        ← Layout raiz: envolve o app com SafeAreaProvider e GamificationProvider
+│   ├── index.tsx          ← Ponto de entrada (redireciona para login ou home)
+│   ├── (auth)/            ← Grupo de rotas públicas (login, register)
+│   │   ├── _layout.tsx
+│   │   ├── login.tsx
+│   │   └── register.tsx
+│   └── (app)/             ← Grupo de rotas protegidas (autenticadas)
+│       ├── _layout.tsx    ← Auth guard: verifica token antes de renderizar
+│       ├── home.tsx       ← Tela principal com cursos
+│       ├── course.tsx     ← Trilha de lições do curso
+│       ├── question.tsx   ← Tela de exercícios da lição
+│       ├── progress.tsx   ← Progresso e histórico do usuário
+│       └── settings.tsx   ← Perfil e configurações
+│
+├── components/            ← Componentes reutilizáveis
+│   ├── Header.tsx
+│   ├── BottomNavBar.tsx
+│   ├── ExerciseCard.tsx
+│   ├── CourseCard.tsx
+│   ├── XPResultScreen.tsx
+│   ├── AchievementUnlockedModal.tsx
+│   ├── ui/                ← Componentes genéricos de UI
+│   │   ├── Button.tsx
+│   │   ├── Input.tsx
+│   │   ├── ScreenLoader.tsx
+│   │   └── FadeSlideIn.tsx
+│   ├── exercise/
+│   │   └── OptionRow.tsx
+│   └── admin/             ← Painel administrativo
+│       ├── AdminPanel.tsx
+│       └── AdminCourses.tsx
+│
+├── store/                 ← Gerenciamento de estado global
+│   ├── gamificationStore.tsx  ← Context API + useReducer (XP, nível, streak)
+│   ├── userStore.ts           ← Zustand (dados do perfil do usuário)
+│   ├── achievementStore.ts    ← Zustand (conquistas)
+│   └── progressStore.ts       ← Zustand (progresso nas lições)
+│
+├── services/              ← Camada de comunicação com o backend
+│   ├── api.ts             ← Cliente Axios central com interceptors de JWT
+│   ├── authService.ts     ← Login, registro, senha
+│   ├── lessonService.ts   ← Buscar e concluir lições
+│   └── progressService.ts ← Gamificação e histórico
+│
+├── hooks/                 ← Custom hooks
+│   └── useResponsiveScale.ts  ← Escala responsiva baseada na largura da tela
+│
+├── types/                 ← Interfaces TypeScript
+├── constants/             ← Cores, assets de exercícios
+├── data/                  ← Mocks de cursos e exercícios para desenvolvimento
+└── assets/                ← Imagens e recursos estáticos
+```
+
+/* ### Como funciona a organização
+
+**Telas:** Cada arquivo `.tsx` dentro de `app/` se torna automaticamente uma rota. Os parênteses em `(auth)` e `(app)` criam grupos de rota que não aparecem na URL, mas permitem layouts compartilhados e guards de autenticação.
+
+**Componentes:** Separados por responsabilidade. Componentes de UI genéricos ficam em `ui/`, os específicos de exercício em `exercise/`, e os administrativos em `admin/`.
+
+**Estado global:** Usamos duas abordagens: `gamificationStore` usa Context API com `useReducer` por ser um estado que envolve lógica de negócio complexa; os demais stores usam Zustand por ser mais simples e direto.
+
+**Serviços:** Toda chamada HTTP passa pelo `api.ts`, que injeta automaticamente o token JWT em cada requisição via interceptor do Axios.
+
+--- */
+
 const styles = StyleSheet.create({
   card: {
     flexDirection: "row",

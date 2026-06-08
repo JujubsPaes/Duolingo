@@ -47,6 +47,57 @@ export default function Avatar({
   const fontSize = dimension * 0.35;
   const showFallback = !uri || imageError;
 
+/*3Navegação implementada no projeto
+
+### Tela de origem: `app/(app)/home.tsx`
+### Tela de destino: `app/(app)/course.tsx`
+
+### Código responsável pela navegação
+
+Em `app/(app)/home.tsx`, a função `handleCoursePress` é chamada quando o usuário toca em um `CourseCard`:
+
+```tsx
+// app/(app)/home.tsx — linha 80-82
+function handleCoursePress(courseId: string, title: string) {
+  router.push({ pathname: "/(app)/course", params: { courseId, title } } as any);
+}
+```
+
+O componente `CourseCard` recebe a função via prop `onPress`:
+
+```tsx
+// app/(app)/home.tsx — linha 117-122
+{COURSES.map((course) => (
+  <CourseCard
+    key={course.id}
+    title={course.title}
+    image={course.image}
+    onPress={() => handleCoursePress(course.id, course.title)}
+  />
+))}
+```
+
+### Diferença entre o método utilizado e outras alternativas
+
+O Expo Router oferece três formas principais de navegar:
+
+| Método | Comportamento | Quando usar |
+|---|---|---|
+| `router.push()` | Empilha a tela nova (pode voltar) | Navegação normal entre telas |
+| `router.replace()` | Substitui a tela atual (não pode voltar) | Login → Home, para não deixar voltar ao login |
+| `<Link href="...">` | Componente declarativo (como `<a>` no HTML) | Links em formulários ou textos |
+
+No nosso projeto usamos `router.push()` para ir de Home para Course porque queremos que o usuário consiga voltar para a seleção de cursos. Já ao concluir ou sair de uma lição, usamos `router.replace()`:
+
+```tsx
+// app/(app)/question.tsx — linha 189
+router.replace({ pathname: "/(app)/course", params: { courseId } } as any);
+```
+
+Isso evita que o usuário pressione "voltar" e retorne para dentro da lição já concluída.
+
+--- */
+
   return (
     <View
       style={[

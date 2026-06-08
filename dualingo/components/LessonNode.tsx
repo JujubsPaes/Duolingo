@@ -87,6 +87,65 @@ export default function LessonNode({
     [getCX]
   );
 
+/*9Análise linha por linha
+
+### Trecho escolhido: `calculateXPGain` — `store/gamificationStore.tsx` (linhas 30–48)
+
+Esta função é o coração do sistema de gamificação. Ela calcula quanto XP o usuário ganha ao concluir uma lição.
+
+---
+
+**Linha: 30**
+```typescript
+export function calculateXPGain(result: LessonResult): XPBreakdown {
+```
+**Explicação:** Declara a função como `export` para que outras partes do app possam importá-la diretamente. Recebe um objeto `LessonResult` com `correctAnswers`, `totalQuestions` e `streakDays`, e retorna um `XPBreakdown` detalhando como o XP foi calculado.
+
+---
+
+**Linha: 31–34**
+```typescript
+const accuracyPercent =
+  result.totalQuestions > 0
+    ? Math.round((result.correctAnswers / result.totalQuestions) * 100)
+    : 0;
+```
+**Explicação:** Calcula a porcentagem de acerto do usuário. Divide os acertos pelo total de questões e multiplica por 100 para obter um número inteiro entre 0 e 100. A guarda `> 0` evita divisão por zero caso a lição não tenha exercícios.
+
+---
+
+**Linha: 36–39**
+```typescript
+const base = Math.round(
+  (result.correctAnswers / Math.max(result.totalQuestions, 1)) * 1000
+);
+```
+**Explicação:** Calcula o XP base da lição. Se o aluno acertar tudo, ganha 1000 XP. Se acertar metade, ganha 500. O `Math.max(..., 1)` é uma segunda proteção contra divisão por zero. O `Math.round` garante que o XP seja sempre um número inteiro.
+
+---
+
+**Linha: 40–41**
+```typescript
+const streakBonus =
+  result.streakDays > 0 && result.streakDays % 7 === 0 ? 500 : 0;
+```
+**Explicação:** Verifica se o streak atual é múltiplo de 7 (7, 14, 21...). Se sim, o usuário ganha um bônus de 500 XP por manter a sequência de estudos por uma semana. A condição `> 0` evita que o streak 0 (sem estudar nunca) acione o bônus, já que `0 % 7 === 0` seria matematicamente verdadeiro.
+
+---
+
+**Linha: 43–48**
+```typescript
+return {
+  base,
+  streakBonus,
+  total: base + streakBonus,
+  accuracyPercent,
+};
+```
+**Explicação:** Retorna o objeto `XPBreakdown` com o detalhamento completo. Esse objeto é usado tanto para atualizar os stores (somando `total` ao XP atual) quanto para exibir na tela `XPResultScreen`, mostrando ao usuário de forma transparente como seu XP foi calculado.
+
+--- */
+
   const svgHeight =
     (lessons.length - 1) * SPACING + NUM_ABOVE + RY * 2 + 40;
 

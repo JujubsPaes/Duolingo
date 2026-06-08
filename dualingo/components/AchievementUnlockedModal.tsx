@@ -65,6 +65,57 @@ export default function AchievementUnlockedModal({
 
   if (!achievement) return null;
 
+/* 2Descrição detalhada de uma tela
+
+### Tela escolhida: `app/(app)/question.tsx` — Tela de Exercícios
+
+Esta é a tela mais completa e representativa do projeto, por isso a escolhemos para apresentar.
+
+### Objetivo da tela
+
+A tela `QuestionScreen` apresenta os exercícios de uma lição ao usuário. Ele responde cada questão uma por uma e, ao finalizar, recebe o resultado (XP ganho, nível atual, conquistas desbloqueadas). Para passar de fase, o aluno precisa acertar pelo menos 70% das questões.
+
+### Arquivos envolvidos
+
+- `app/(app)/question.tsx` — Tela principal
+- `components/ExerciseCard.tsx` — Renderiza cada exercício
+- `components/ui/Button.tsx` — Botões de ação
+- `components/Header.tsx` — Barra superior com dados do usuário
+- `components/XPResultScreen.tsx` — Tela de resultado após finalizar
+- `components/AchievementUnlockedModal.tsx` — Modal de conquista desbloqueada
+- `store/gamificationStore.tsx` — Calcula e atualiza XP e streak
+- `store/progressStore.ts` — Marca lição como concluída e desbloqueia a próxima
+- `store/achievementStore.ts` — Verifica e desbloqueia conquistas
+- `store/userStore.ts` — Acessa dados do usuário (username, streak, avatar)
+- `services/lessonService.ts` — Envia respostas ao backend
+- `data/mockExercises.ts` — Fonte de exercícios em desenvolvimento
+
+### Componentes utilizados
+
+| Componente | Função na tela |
+|---|---|
+| `Header` | Exibe username, nível, streak e avatar |
+| `ExerciseCard` | Renderiza a pergunta, imagem e opções de resposta |
+| `Button` | Botões "Confirmar", "Próximo" e "Voltar" |
+| `BottomNavBar` | Navegação entre as abas principais |
+| `XPResultScreen` | Exibida após finalizar todos os exercícios |
+| `AchievementUnlockedModal` | Modal quando uma conquista é desbloqueada |
+
+### Fluxo de navegação para acessar essa tela
+
+1. Usuário abre o app → `app/index.tsx`
+2. Tem token salvo → `app/(app)/_layout.tsx` (auth guard valida)
+3. Entra em `app/(app)/home.tsx`
+4. Clica em um curso → `app/(app)/course.tsx` (recebe `courseId` como parâmetro)
+5. Clica em uma lição disponível → `app/(app)/question.tsx` (recebe `courseId` e `lessonId`)
+
+A navegação para `question.tsx` é feita em `course.tsx` com:
+```tsx
+router.push({
+  pathname: "/(app)/question",
+  params: { courseId, lessonId }
+} as any); */
+
   return (
     <Modal
       visible={visible}

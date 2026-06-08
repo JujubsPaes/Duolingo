@@ -56,6 +56,85 @@ export default function LevelUpModal({
   );
 }
 
+/*10Análise crítica do projeto
+
+### Melhoria técnica: Persistência local com AsyncStorage ou MMKV
+
+Atualmente, ao fechar o app completamente, o estado dos stores Zustand (`progressStore`, `achievementStore`) é perdido. Na próxima abertura, a função `guard()` busca apenas os dados de gamificação no backend (`/gamification`), mas o progresso de quais lições estão desbloqueadas vem de mocks locais.
+
+**Sugestão:** Adicionar persistência com o middleware `persist` do Zustand usando `expo-secure-store` ou `react-native-mmkv` como storage:
+
+```typescript
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+export const useProgressStore = create(
+  persist(
+    (set) => ({ ... }),
+    {
+      name: 'dualingo-progress',
+      storage: createJSONStorage(() => AsyncStorage),
+    }
+  )
+);
+```
+
+Isso garantiria que o progresso das lições seja preservado entre sessões sem depender do backend, melhorando a experiência offline e reduzindo chamadas à API.
+
+---
+
+### Melhoria de UX: Feedback háptico ao confirmar resposta
+
+O app já tem `expo-haptics` como dependência no `package.json`, mas ele não está sendo utilizado na tela de exercícios. Adicionar vibração ao confirmar uma resposta certa ou errada tornaria a experiência muito mais similar ao Duolingo original:
+
+```tsx
+// Em question.tsx, dentro de handleConfirm():
+import * as Haptics from 'expo-haptics';
+
+function handleConfirm() {
+  if (!selectedAnswerId || !exercise) return;
+  const isCorrect = selectedAnswerId === exercise.correctAnswerId;
+
+  if (isCorrect) {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  } else {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  }
+  // ... resto da lógica
+}
+```
+
+Essa melhoria custaria literalmente 3 linhas de código e elevaria significativamente a percepção de qualidade do produto para usuários de dispositivos físicos.
+
+---
+
+### Funcionalidade para próxima versão: Modo offline com fila de sincronização
+
+Hoje, se o usuário estiver sem internet e concluir uma lição, a chamada `POST /lessons/{id}/complete` falha silenciosamente (apenas um `console.warn`). O XP é calculado localmente, mas o progresso não é salvo no backend.
+
+**Proposta:** Implementar uma fila de sincronização offline com `react-native-netinfo` para detectar conectividade e persistir as ações pendentes localmente:
+
+```typescript
+// services/syncQueue.ts
+interface PendingAction {
+  type: 'complete_lesson';
+  lessonId: string;
+  answers: Record<string, string>;
+  timestamp: number;
+}
+
+async function flushQueue(): Promise<void> {
+  const queue = await loadQueueFromStorage();
+  for (const action of queue) {
+    await lessonService.completeLesson(action.lessonId, { answers: action.answers });
+  }
+  await clearQueue();
+}
+```
+
+Isso permitiria que o usuário estudasse no metrô ou em locais sem sinal e tivesse seu progresso sincronizado automaticamente na próxima vez que abrisse o app com conexão. É uma feature especialmente relevante para o público-alvo de apps educacionais. */
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,

@@ -56,6 +56,114 @@ function FeedbackBanner({
 }) {
   const isCorrect = feedback.isCorrect;
 
+/*6Chamada ao backend
+
+### Endpoint: `POST /lessons/{id}/complete`
+
+Esta chamada é feita em `services/lessonService.ts` e disparada pela tela `question.tsx` ao finalizar todos os exercícios.
+
+### Arquivo: `services/lessonService.ts`
+
+```typescript
+// services/lessonService.ts — linha 41-50
+export async function completeLesson(
+  lessonId: string,
+  data: CompleteLessonRequest
+): Promise<CompleteLessonResponse> {
+  const response = await api.post<ApiResponse<CompleteLessonResponse>>(
+    `/lessons/${lessonId}/complete`,
+    data
+  );
+  return response.data.data;
+}
+```
+
+### Método HTTP utilizado
+`POST`
+
+### Dados enviados
+
+```typescript
+// services/lessonService.ts — linha 5-7
+interface CompleteLessonRequest {
+  answers: Record<string, string>; // { exerciseId: answerId }
+}
+```
+
+Exemplo de payload real:
+```json
+{
+  "answers": {
+    "exercise-1": "option-b",
+    "exercise-2": "true",
+    "exercise-3": "option-a"
+  }
+}
+```
+
+### Resposta esperada
+
+```typescript
+// services/lessonService.ts — linha 9-18
+interface CompleteLessonResponse {
+  passed: boolean;       // true se acertou >= 70%
+  correctCount: number;
+  wrongCount: number;
+  xpEarned: number;
+  newXP?: number;        // XP total atualizado
+  newLevel?: number;     // nível atualizado
+  newStreak?: number;    // streak atualizado
+  nextLessonId?: string; // próxima lição desbloqueada
+}
+```
+
+### Como a aplicação trata possíveis erros
+
+```tsx
+// app/(app)/question.tsx — linha 117-133
+if (lessonId) {
+  lessonService.completeLesson(lessonId, { answers: answersMap })
+    .then((response) => {
+      if (response.passed) {
+        useUserStore.getState().hydrateFromGamification({
+          xp: response.newXP ?? state.xp,
+          level: response.newLevel ?? state.level,
+          streak: response.newStreak ?? state.streak,
+          achievements: [],
+        });
+      }
+    })
+    .catch((err) => {
+      console.warn("[QuestionScreen] Erro ao salvar no backend:", err?.message);
+    });
+}
+```
+
+A aplicação usa uma estratégia de **otimistic update**: a UI é atualizada imediatamente com os cálculos locais (`completeLesson` do `gamificationStore`) sem esperar o backend. Se a chamada falhar (backend offline, token expirado), apenas loga um aviso — o usuário não perde o progresso local da sessão.
+
+O tratamento global de erros HTTP fica no interceptor de `api.ts`:
+
+```typescript
+// services/api.ts — linha 96-118
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError<ApiError>) => {
+    if (!error.response) {
+      return Promise.reject({ statusCode: 0, message: "Não foi possível conectar ao servidor." });
+    }
+    const status = error.response.status;
+    if (status === 401 && !isHandling401) {
+      isHandling401 = true;
+      await deleteStorageItem(TOKEN_KEYS.ACCESS);
+      await deleteStorageItem(TOKEN_KEYS.REFRESH);
+      await deleteStorageItem(TOKEN_KEYS.ID);
+      setTimeout(() => { isHandling401 = false; }, 2000);
+    }
+    return Promise.reject({ statusCode: status, message });
+  }
+);
+``` */
+
   return (
     <View
       style={[
