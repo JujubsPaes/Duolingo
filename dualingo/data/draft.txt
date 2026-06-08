@@ -1,0 +1,1888 @@
+================================================================================
+  INDICE
+================================================================================
+
+  [01] O que é Expo e como funciona
+  [02] Estrutura de pastas do projeto
+  [03] Navegação com Expo Router (file-based routing)
+  [04] Criando uma tela do zero
+  [05] Componentes reutilizáveis — como criar e usar
+  [06] Estilização com StyleSheet
+  [07] Gerenciamento de estado com Zustand
+  [08] Chamadas HTTP com Axios + interceptors
+  [09] Responsividade — adaptando para qualquer tela
+  [10] Como fazer modificações no projeto existente
+
+================================================================================
+  [01] O QUE E EXPO E COMO FUNCIONA
+================================================================================
+
+  Expo é um framework que roda sobre React Native.
+  Ele abstrai a configuração nativa (Xcode, Android Studio) para que
+  voce possa escrever apps mobile usando apenas JavaScript/TypeScript.
+
+  O que voce ganha:
+  - Hot reload (salva o arquivo, ve a mudanca na hora)
+  - Expo Router (navegação baseada em arquivos, como Next.js)
+  - Acesso a APIs nativas (camera, GPS, storage) via pacotes expo-*
+  - Build para iOS/Android/Web com um unico codebase
+
+  Comando para criar um projeto novo:
+    npx create-expo-app@latest meu-app --template blank-typescript
+
+  Comando para rodar:
+    npx expo start
+
+  No nosso projeto Dualingo, a raiz do codigo esta em /dualingo/.
+  O backend local esta em /dualingo/backend/.
+
+================================================================================
+  [02] ESTRUTURA DE PASTAS DO PROJETO
+================================================================================
+
+  dualingo/
+  ├── app/                    <- Telas (cada arquivo = uma rota)
+  │   ├── _layout.tsx         <- Layout raiz (envolve todas as telas)
+  │   ├── index.tsx           <- Tela inicial (redireciona para login)
+  │   ├── (auth)/             <- Grupo de autenticacao
+  │   │   ├── _layout.tsx     <- Layout do grupo auth
+  │   │   ├── login.tsx       <- Tela de login
+  │   │   └── register.tsx    <- Tela de cadastro
+  │   └── (app)/              <- Grupo do app logado
+  │       ├── _layout.tsx     <- Layout do grupo app
+  │       ├── home.tsx        <- Tela principal (lista de cursos)
+  │       ├── course.tsx      <- Trilha de licoes de um curso
+  │       ├── question.tsx    <- Tela de exercicios
+  │       ├── progress.tsx    <- Progresso e conquistas
+  │       └── settings.tsx    <- Configuracoes do usuario
+  ├── components/             <- Componentes reutilizaveis
+  │   ├── ui/                 <- Design System (Button, Input, etc.)
+  │   ├── Header.tsx          <- Cabecalho com avatar/nome/nivel
+  │   ├── CourseCard.tsx      <- Card de curso
+  │   ├── LessonNode.tsx      <- No da trilha de licoes
+  │   └── XPBar.tsx           <- Barra de progresso de XP
+  ├── store/                  <- Estado global (Zustand)
+  │   ├── userStore.ts        <- Dados do usuario logado
+  │   ├── gamificationStore.ts <- XP, nivel, streak
+  │   └── progressStore.ts   <- Status das licoes
+  ├── services/               <- Chamadas HTTP (Axios)
+  │   ├── api.ts              <- Instancia do Axios + interceptors
+  │   ├── authService.ts      <- Login, registro, logout
+  │   └── courseService.ts    <- Cursos e modulos
+  ├── constants/              <- Cores, configs
+  │   └── colors.ts           <- Tema do app
+  ├── types/                  <- Tipos TypeScript
+  └── assets/                 <- Imagens, fontes
+
+  Regra importante: no Expo Router, a PASTA define a rota.
+  O arquivo app/(auth)/login.tsx corresponde a URL /(auth)/login.
+  Pastas entre parenteses (auth) sao "grupos" — nao aparecem na URL final.
+
+================================================================================
+  [03] NAVEGACAO COM EXPO ROUTER (FILE-BASED ROUTING)
+================================================================================
+
+  Expo Router funciona assim: cada arquivo .tsx dentro de app/ vira uma tela.
+  A navegacao e feita via funcoes do "expo-router":
+
+    import { router } from "expo-router";
+
+    router.push("/caminho")     -> adiciona tela na pilha (pode voltar)
+    router.replace("/caminho")  -> substitui a tela atual (nao pode voltar)
+    router.back()               -> volta para a tela anterior
+
+  ── EXEMPLO REAL: Layout raiz (app/_layout.tsx) ──────────────────────────────
+
+  Este arquivo e o primeiro a ser renderizado. Define a estrutura de navegacao:
+
+    import { Stack } from "expo-router";
+    import { SafeAreaProvider } from "react-native-safe-area-context";
+    import { GamificationProvider } from "../store/gamificationStore";
+
+    export default function RootLayout() {
+      return (
+        <SafeAreaProvider>
+          <GamificationProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(app)" />
+            </Stack>
+          </GamificationProvider>
+        </SafeAreaProvider>
+      );
+    }
+
+  O que cada linha faz:
+  - SafeAreaProvider: protege o conteudo de ficar atras do notch ou barra de status
+  - GamificationProvider: disponibiliza os dados de XP/nivel para todas as telas
+  - Stack: define navegacao em pilha (tipo uma pilha de cartas)
+  - screenOptions={{ headerShown: false }}: esconde o header padrao do react-navigation
+  - Stack.Screen name="(auth)": registra o grupo de autenticacao como uma tela na pilha
+  - Stack.Screen name="(app)": registra o grupo do app logado
+
+  ── EXEMPLO REAL: Navegando entre telas (login.tsx -> home.tsx) ───────────────
+
+  No login, apos autenticar com sucesso, fazemos:
+
+    router.replace("/(app)/home");
+
+  Usamos replace (e nao push) porque nao queremos que o usuario consiga
+  voltar para a tela de login apertando o botao "voltar".
+
+  ── EXEMPLO REAL: Navegando com parametros (home.tsx -> course.tsx) ───────────
+
+  Na HomeScreen, ao clicar em um curso, passamos o ID como parametro:
+
+    function handleCoursePress(courseId: string, title: string) {
+      router.push({
+        pathname: "/(app)/course",
+        params: { courseId, title },
+      } as any);
+    }
+
+  Na CourseScreen, pegamos o parametro assim:
+
+    import { useLocalSearchParams } from "expo-router";
+
+    const { courseId } = useLocalSearchParams<{ courseId?: string }>();
+
+  Isso permite que a mesma tela exiba cursos diferentes dependendo do ID passado.
+
+================================================================================
+  [04] CRIANDO UMA TELA DO ZERO
+================================================================================
+
+  Para criar uma nova tela no Expo Router, basta criar um arquivo .tsx
+  dentro da pasta app/. O nome do arquivo vira a rota.
+
+  Exemplo: criar app/(app)/profile.tsx disponibiliza a rota /(app)/profile.
+
+  ── ESTRUTURA MINIMA DE UMA TELA ─────────────────────────────────────────────
+
+    import React from "react";
+    import { StyleSheet, Text, View } from "react-native";
+    import { SafeAreaView } from "react-native-safe-area-context";
+    import { Theme } from "../../constants/colors";
+
+    export default function ProfileScreen() {
+      return (
+        <View style={styles.root}>
+          <SafeAreaView style={styles.safeArea}>
+            <Text style={styles.title}>Minha tela nova</Text>
+          </SafeAreaView>
+        </View>
+      );
+    }
+
+    const styles = StyleSheet.create({
+      root: { flex: 1, backgroundColor: Theme.screenBackground },
+      safeArea: { flex: 1, padding: 20 },
+      title: { color: "#FFFFFF", fontSize: 24, fontWeight: "700" },
+    });
+
+  ── REGISTRANDO A TELA NO LAYOUT ────────────────────────────────────────────
+
+  Adicione a tela no _layout.tsx do grupo correspondente:
+
+    // app/(app)/_layout.tsx
+    <Stack.Screen name="profile" />
+
+  Pronto. Agora voce pode navegar para ela com:
+
+    router.push("/(app)/profile");
+
+  ── EXEMPLO REAL: Tela de login (simplificada) ───────────────────────────────
+
+  Vamos analisar a estrutura da tela de login do Dualingo:
+
+    export default function LoginScreen() {
+      // 1. Estados locais (o que o usuario digita)
+      const [email, setEmail] = useState("");
+      const [password, setPassword] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [loginError, setLoginError] = useState("");
+
+      // 2. Funcao de validacao (roda antes de enviar)
+      function validate() {
+        if (!email.trim()) { setEmailError("Informe seu email."); return false; }
+        if (!password)      { setPasswordError("Informe sua senha."); return false; }
+        return true;
+      }
+
+      // 3. Funcao de submit (chama o backend)
+      async function handleLogin() {
+        if (!validate()) return;
+        setLoading(true);
+        try {
+          const user = await authService.login({ email, password });
+          useUserStore.getState().hydrateFromUser(user);
+          router.replace("/(app)/home");
+        } catch (err: any) {
+          setLoginError(err?.message ?? "Erro ao fazer login.");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // 4. Renderizacao (JSX)
+      return (
+        <View style={styles.flex}>
+          <Input placeholder="Email" value={email} onChangeText={setEmail} />
+          <Input mode="password" placeholder="Senha" value={password} onChangeText={setPassword} />
+          <Button label="Login" onPress={handleLogin} loading={loading} />
+        </View>
+      );
+    }
+
+  Padrao que se repete em TODAS as telas do projeto:
+  1. Declarar estados com useState
+  2. Criar funcoes de validacao e submit
+  3. Retornar JSX com componentes reutilizaveis
+  4. Definir estilos com StyleSheet.create ao final do arquivo
+
+================================================================================
+  [05] COMPONENTES REUTILIZAVEIS — COMO CRIAR E USAR
+================================================================================
+
+  Componentes ficam na pasta components/. Sao funcoes que retornam JSX
+  e aceitam "props" (propriedades) para serem configurados.
+
+  ── EXEMPLO REAL: Componente Button (components/ui/Button.tsx) ────────────────
+
+  Este botao e usado em TODAS as telas do app. Aceita diferentes variantes:
+
+    interface ButtonProps {
+      label: string;            // Texto do botao (obrigatorio)
+      onPress?: () => void;     // Funcao ao clicar
+      variant?: "primary" | "secondary" | "disabled";
+      loading?: boolean;        // Se true, mostra spinner
+      icon?: React.ReactNode;   // Icone opcional
+      fullWidth?: boolean;      // Se true, ocupa 100% da largura
+    }
+
+    export default function Button({ label, onPress, variant = "primary", loading = false }: ButtonProps) {
+      const isDisabled = variant === "disabled" || loading;
+
+      return (
+        <Pressable
+          onPress={isDisabled ? undefined : onPress}
+          style={[styles.base, getButtonStyles()]}
+          accessibilityRole="button"
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.label}>{label}</Text>
+          )}
+        </Pressable>
+      );
+    }
+
+  Como usar em qualquer tela:
+
+    import Button from "../../components/ui/Button";
+
+    <Button label="Salvar" onPress={handleSave} />
+    <Button label="Cancelar" variant="secondary" onPress={handleCancel} />
+    <Button label="Salvando..." loading={true} variant="disabled" />
+
+  ── EXEMPLO REAL: Componente Input (components/ui/Input.tsx) ──────────────────
+
+  Input com suporte a modo texto/senha e mensagem de erro:
+
+    interface InputProps {
+      mode?: "text" | "password";   // Texto normal ou campo de senha
+      placeholder?: string;         // Texto placeholder
+      value: string;                // Valor atual (controlado)
+      onChangeText: (text: string) => void;  // Callback quando digita
+      error?: string;               // Mensagem de erro (aparece abaixo)
+    }
+
+    export default function Input({ mode = "text", placeholder, value, onChangeText, error }: InputProps) {
+      const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+      const isPassword = mode === "password";
+
+      return (
+        <View style={styles.wrapper}>
+          <View style={[styles.container, error ? styles.containerError : null]}>
+            <TextInput
+              placeholder={placeholder}
+              value={value}
+              onChangeText={onChangeText}
+              secureTextEntry={isPassword && !isPasswordVisible}
+            />
+            {isPassword && (
+              <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
+                <Ionicons name={isPasswordVisible ? "eye-off-outline" : "eye-outline"} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {error && <Text style={styles.errorText}>{error}</Text>}
+        </View>
+      );
+    }
+
+  Como usar:
+
+    <Input
+      mode="text"
+      placeholder="Insira seu email"
+      value={email}
+      onChangeText={setEmail}
+      keyboardType="email-address"
+      error={emailError}
+    />
+
+  ── COMO CRIAR UM COMPONENTE NOVO ────────────────────────────────────────────
+
+  1. Crie um arquivo em components/ (ex: components/MeuComponente.tsx)
+  2. Defina a interface de props (o que ele aceita)
+  3. Escreva a funcao que retorna JSX
+  4. Exporte como default
+  5. Importe e use em qualquer tela
+
+  Exemplo minimo:
+
+    // components/Badge.tsx
+    import React from "react";
+    import { StyleSheet, Text, View } from "react-native";
+
+    interface BadgeProps {
+      text: string;
+      color?: string;
+    }
+
+    export default function Badge({ text, color = "#093AFF" }: BadgeProps) {
+      return (
+        <View style={[styles.container, { backgroundColor: color }]}>
+          <Text style={styles.text}>{text}</Text>
+        </View>
+      );
+    }
+
+    const styles = StyleSheet.create({
+      container: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+      text: { color: "#FFFFFF", fontSize: 12, fontWeight: "600" },
+    });
+
+  Uso:
+    import Badge from "../components/Badge";
+    <Badge text="Novo" color="#22C55E" />
+
+================================================================================
+  [06] ESTILIZACAO COM STYLESHEET
+================================================================================
+
+  React Native NAO usa CSS. Usa objetos JavaScript com propriedades camelCase.
+  A API StyleSheet.create otimiza os estilos para performance nativa.
+
+  ── EQUIVALENCIAS CSS -> REACT NATIVE ────────────────────────────────────────
+
+    CSS                          React Native
+    ─────────────────────────    ─────────────────────────────
+    display: flex                (padrao, nao precisa declarar)
+    flex-direction: row          flexDirection: "row"
+    justify-content: center      justifyContent: "center"
+    align-items: center          alignItems: "center"
+    background-color: red        backgroundColor: "red"
+    font-size: 16px              fontSize: 16
+    font-weight: bold            fontWeight: "700"
+    border-radius: 10px         borderRadius: 10
+    padding: 20px               padding: 20
+    margin-top: 10px            marginTop: 10
+    width: 100%                 width: "100%"
+    gap: 12px                   gap: 12
+
+  ── EXEMPLO REAL: Estilos da HomeScreen ──────────────────────────────────────
+
+    const styles = StyleSheet.create({
+      root: {
+        flex: 1,                          // Ocupa toda a tela
+        backgroundColor: "#000721",       // Fundo escuro azulado
+      },
+      safeArea: {
+        flex: 1,
+        backgroundColor: "#000721",
+      },
+      sectionTitle: {
+        color: "#FFFFFF",                 // Texto branco
+        fontSize: 28,                     // Tamanho grande
+        fontWeight: "800",                // Extra bold
+        marginTop: 24,                    // Espaco acima
+        marginBottom: 32,                 // Espaco abaixo
+        textAlign: "center",              // Centralizado
+      },
+      coursesGrid: {
+        flexDirection: "row",             // Itens lado a lado
+        flexWrap: "wrap",                 // Quebra linha quando nao cabe
+        paddingHorizontal: 12,            // Padding lateral
+        gap: 12,                          // Espaco entre cards
+        width: "100%",                    // Ocupa toda a largura
+        justifyContent: "center",         // Centraliza os cards
+      },
+    });
+
+  ── TEMA CENTRALIZADO (constants/colors.ts) ──────────────────────────────────
+
+  O projeto usa um arquivo de cores centralizado. Nenhuma cor e "hardcoded"
+  diretamente nos componentes (exceto em StyleSheet.create por limitacao):
+
+    export const Colors = {
+      primary: "#093AFF",           // Azul principal
+      green: "#00DF21",             // Verde (XP, sucesso)
+      screenBackground: "#000721",  // Fundo das telas
+      error: "#FF3B30",             // Vermelho (erros)
+      success: "#22C55E",           // Verde (acertos)
+    } as const;
+
+    export const Theme = {
+      screenBackground: Colors.screenBackground,
+      brand: Colors.primary,
+      text: Colors.text,
+      inputError: Colors.error,
+    } as const;
+
+  Uso nos componentes:
+
+    import { Theme } from "../../constants/colors";
+
+    const styles = StyleSheet.create({
+      root: { backgroundColor: Theme.screenBackground },
+      title: { color: Theme.text },
+    });
+
+  Vantagem: se quiser mudar a cor primaria do app inteiro, altera UM arquivo.
+
+================================================================================
+  [07] GERENCIAMENTO DE ESTADO COM ZUSTAND
+================================================================================
+
+  Zustand e uma biblioteca de estado global. Mais simples que Redux.
+  Cria "stores" que podem ser acessados de qualquer componente.
+
+  ── CONCEITO ─────────────────────────────────────────────────────────────────
+
+  Problema: o usuario faz login na tela LoginScreen, mas o nome dele
+  precisa aparecer no Header (que esta na HomeScreen).
+
+  Solucao: store global. O login salva os dados no store, e qualquer
+  componente pode ler esses dados.
+
+  ── EXEMPLO REAL: userStore.ts ───────────────────────────────────────────────
+
+    import { create } from "zustand";
+
+    // Interface: define a "forma" do estado
+    interface UserState {
+      userId: string | undefined;
+      username: string;
+      email: string;
+      level: number;
+      streak: number;
+      currentXP: number;
+      // Acoes (funcoes que modificam o estado)
+      setUsername: (name: string) => void;
+      hydrateFromUser: (user: User) => void;
+      reset: () => void;
+    }
+
+    // Cria o store
+    export const useUserStore = create<UserState>((set) => ({
+      // Estado inicial
+      userId: undefined,
+      username: "Username",
+      email: "",
+      level: 1,
+      streak: 0,
+      currentXP: 0,
+
+      // Acao: atualiza o nome
+      setUsername: (name) => set({ username: name }),
+
+      // Acao: preenche tudo com dados do backend (apos login)
+      hydrateFromUser: (user) => set({
+        userId: user.userId,
+        username: user.name,
+        email: user.email,
+        level: user.level,
+        streak: user.streak,
+        currentXP: user.xp,
+      }),
+
+      // Acao: limpa tudo (logout)
+      reset: () => set({
+        userId: undefined,
+        username: "Username",
+        email: "",
+        level: 1,
+        streak: 0,
+        currentXP: 0,
+      }),
+    }));
+
+  ── COMO USAR EM QUALQUER COMPONENTE ────────────────────────────────────────
+
+  Lendo dados (re-renderiza automaticamente quando o valor muda):
+
+    import { useUserStore } from "../../store/userStore";
+
+    function Header() {
+      const { username, level, streak } = useUserStore();
+      return <Text>{username} - Nivel {level}</Text>;
+    }
+
+  Escrevendo dados (pode ser chamado de QUALQUER lugar, ate fora de componentes):
+
+    // Dentro de componente (hook)
+    const { setUsername } = useUserStore();
+    setUsername("Novo Nome");
+
+    // Fora de componente (direto no store)
+    useUserStore.getState().hydrateFromUser(userData);
+    useUserStore.getState().reset();
+
+  ── QUANDO USAR ZUSTAND vs useState ─────────────────────────────────────────
+
+  useState  -> dados que so existem NAQUELA tela (ex: texto do input, loading)
+  Zustand   -> dados que VARIAS telas precisam (ex: nome do usuario, XP, nivel)
+
+  No Dualingo:
+  - useState: email digitado, senha, erros de validacao, modal aberto/fechado
+  - Zustand: usuario logado (userStore), XP/nivel (gamificationStore), progresso
+
+================================================================================
+  [08] CHAMADAS HTTP COM AXIOS + INTERCEPTORS
+================================================================================
+
+  O frontend se comunica com o backend via HTTP (REST API).
+  Usamos Axios para fazer as requisicoes. A configuracao fica em services/api.ts.
+
+  ── EXEMPLO REAL: Configuracao do Axios (services/api.ts) ────────────────────
+
+    import axios from "axios";
+
+    // URL base vem do .env (variavel de ambiente)
+    const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001";
+
+    // Cria instancia com configuracao padrao
+    const api = axios.create({
+      baseURL: BASE_URL,        // Prefixo de todas as URLs
+      timeout: 10000,           // 10 segundos de timeout
+      headers: { "Content-Type": "application/json" },
+    });
+
+    // INTERCEPTOR DE REQUISICAO — injeta token em TODAS as chamadas
+    api.interceptors.request.use(async (config) => {
+      const token = await getStorageItem("dualingo_access_token");
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    });
+
+    // INTERCEPTOR DE RESPOSTA — trata erros globalmente
+    api.interceptors.response.use(
+      (response) => response,           // Sucesso: repassa
+      async (error) => {
+        if (!error.response) {
+          // Backend offline
+          return Promise.reject({ message: "Servidor indisponivel." });
+        }
+        if (error.response.status === 401) {
+          // Token expirado — limpa tokens para forcar novo login
+          await deleteStorageItem("dualingo_access_token");
+        }
+        return Promise.reject({
+          statusCode: error.response.status,
+          message: error.response.data?.message ?? "Erro inesperado.",
+        });
+      }
+    );
+
+    export default api;
+
+  ── EXEMPLO REAL: Service de autenticacao ────────────────────────────────────
+
+  Os services usam a instancia do Axios para fazer chamadas especificas:
+
+    // services/authService.ts
+    import api, { setStorageItem, TOKEN_KEYS } from "./api";
+
+    export async function login(credentials: { email: string; password: string }) {
+      const response = await api.post("/auth/login", credentials);
+      // Salva o token retornado para uso futuro
+      await setStorageItem(TOKEN_KEYS.ACCESS, response.data.token);
+      return response.data.user;
+    }
+
+    export async function logout() {
+      await deleteStorageItem(TOKEN_KEYS.ACCESS);
+    }
+
+  ── COMO USAR NAS TELAS ─────────────────────────────────────────────────────
+
+    import * as authService from "../../services/authService";
+
+    async function handleLogin() {
+      try {
+        const user = await authService.login({ email, password });
+        // Sucesso: user contem os dados do usuario
+        useUserStore.getState().hydrateFromUser(user);
+        router.replace("/(app)/home");
+      } catch (err: any) {
+        // Erro: a mensagem ja vem formatada pelo interceptor
+        setLoginError(err.message);
+      }
+    }
+
+  ── COMO ADICIONAR UM NOVO ENDPOINT ──────────────────────────────────────────
+
+  1. Crie (ou edite) um arquivo em services/ (ex: services/lessonService.ts)
+  2. Importe a instancia do api
+  3. Crie a funcao que faz a chamada
+  4. Exporte e use na tela
+
+    // services/lessonService.ts
+    import api from "./api";
+
+    export async function getLesson(lessonId: string) {
+      const response = await api.get(`/lessons/${lessonId}`);
+      return response.data;
+    }
+
+    export async function completeLesson(lessonId: string, answers: any[]) {
+      const response = await api.post(`/lessons/${lessonId}/complete`, { answers });
+      return response.data;
+    }
+
+================================================================================
+  [09] RESPONSIVIDADE — ADAPTANDO PARA QUALQUER TELA
+================================================================================
+
+  React Native nao tem media queries como CSS. O Dualingo usa uma abordagem
+  de escala proporcional: define uma largura base (iPhone 14 Pro = 393px)
+  e calcula um fator de multiplicacao.
+
+  ── EXEMPLO REAL: Sistema de escala responsiva ───────────────────────────────
+
+    import { useWindowDimensions } from "react-native";
+
+    const BASE_WIDTH = 393; // Largura de referencia (iPhone 14 Pro)
+
+    export default function LoginScreen() {
+      const { width, height } = useWindowDimensions();
+
+      // Calcula o fator de escala
+      // Tela de 786px -> escala 2.0 (tudo 2x maior)
+      // Tela de 360px -> escala 0.92 (tudo um pouco menor)
+      const scale = width / BASE_WIDTH;
+
+      // Funcao helper: aplica escala a qualquer valor
+      const rs = (size: number) => Math.round(size * scale);
+
+      // Detecta telas pequenas para ajustes extras
+      const isSmall = height < 700;
+
+      return (
+        <View style={{ paddingHorizontal: rs(28), paddingTop: isSmall ? rs(100) : rs(160) }}>
+          <Text style={{ fontSize: rs(64) }}>Dualingo</Text>
+          <Button style={{ height: rs(56) }} />
+        </View>
+      );
+    }
+
+  Resultado:
+  - Em um celular pequeno (360px): fonte 58px, padding 25px
+  - Em um celular medio (393px): fonte 64px, padding 28px
+  - Em um tablet (786px): fonte 128px, padding 56px
+  - Na web fullscreen (1920px): escala ainda maior
+
+  ── HOOK REUTILIZAVEL (hooks/useResponsiveScale.ts) ──────────────────────────
+
+  Para nao repetir esse calculo em todo componente, o projeto tem um hook:
+
+    import { useWindowDimensions } from "react-native";
+
+    const BASE_WIDTH = 393;
+
+    export function useResponsiveScale() {
+      const { width, height } = useWindowDimensions();
+      const scale = width / BASE_WIDTH;
+      const rs = (size: number) => Math.round(size * scale);
+      const isSmall = height < 700;
+      return { rs, scale, width, height, isSmall };
+    }
+
+  Uso:
+
+    import { useResponsiveScale } from "../../hooks/useResponsiveScale";
+
+    function MeuComponente() {
+      const { rs } = useResponsiveScale();
+      return <Text style={{ fontSize: rs(20) }}>Texto responsivo</Text>;
+    }
+
+================================================================================
+  [10] COMO FAZER MODIFICACOES NO PROJETO EXISTENTE
+================================================================================
+
+  ── CENARIO 1: Mudar a cor de um botao ───────────────────────────────────────
+
+  Arquivo: components/ui/Button.tsx
+  Localize a funcao getButtonStyles() e altere backgroundColor:
+
+    // Antes (azul):
+    return { ...base, backgroundColor: "#093AFF", borderColor: "#0026BD" };
+
+    // Depois (verde):
+    return { ...base, backgroundColor: "#22C55E", borderColor: "#16A34A" };
+
+  Ou melhor: altere em constants/colors.ts para mudar em todo o app:
+
+    primary: "#22C55E",  // Era "#093AFF"
+
+  ── CENARIO 2: Adicionar um campo novo no formulario de login ────────────────
+
+  1. Declare o estado:
+    const [cpf, setCpf] = useState("");
+
+  2. Adicione o Input no JSX (dentro do <View style={styles.form}>):
+    <Input mode="text" placeholder="CPF" value={cpf} onChangeText={setCpf} />
+
+  3. Inclua na validacao (funcao validate):
+    if (!cpf.trim()) { setCpfError("Informe seu CPF."); valid = false; }
+
+  4. Envie ao backend (funcao handleLogin):
+    const user = await authService.login({ email, password, cpf });
+
+  ── CENARIO 3: Criar uma tela nova com lista de dados do backend ─────────────
+
+  Passo 1 — Criar o arquivo de tela:
+
+    // app/(app)/ranking.tsx
+    import React, { useEffect, useState } from "react";
+    import { FlatList, StyleSheet, Text, View } from "react-native";
+    import { SafeAreaView } from "react-native-safe-area-context";
+    import { Theme } from "../../constants/colors";
+    import api from "../../services/api";
+
+    export default function RankingScreen() {
+      const [users, setUsers] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        api.get("/ranking")
+          .then((res) => setUsers(res.data))
+          .catch((err) => console.error(err))
+          .finally(() => setLoading(false));
+      }, []);
+
+      return (
+        <View style={styles.root}>
+          <SafeAreaView style={styles.safeArea}>
+            <Text style={styles.title}>Ranking</Text>
+            <FlatList
+              data={users}
+              keyExtractor={(item) => item.userId}
+              renderItem={({ item, index }) => (
+                <View style={styles.row}>
+                  <Text style={styles.position}>{index + 1}.</Text>
+                  <Text style={styles.name}>{item.name}</Text>
+                  <Text style={styles.xp}>{item.xp} XP</Text>
+                </View>
+              )}
+            />
+          </SafeAreaView>
+        </View>
+      );
+    }
+
+    const styles = StyleSheet.create({
+      root: { flex: 1, backgroundColor: Theme.screenBackground },
+      safeArea: { flex: 1, padding: 20 },
+      title: { color: "#FFF", fontSize: 24, fontWeight: "700", marginBottom: 20 },
+      row: { flexDirection: "row", padding: 12, borderBottomWidth: 1, borderBottomColor: "#1E3A5F" },
+      position: { color: "#FFF", width: 30 },
+      name: { color: "#FFF", flex: 1 },
+      xp: { color: "#00DF21", fontWeight: "700" },
+    });
+
+  Passo 2 — Registrar no layout:
+
+    // app/(app)/_layout.tsx — adicione:
+    <Stack.Screen name="ranking" />
+
+  Passo 3 — Navegar para a nova tela:
+
+    // Em qualquer lugar:
+    router.push("/(app)/ranking");
+
+  ── CENARIO 4: Reutilizar um componente com props diferentes ─────────────────
+
+  O componente XPResultScreen aceita props que mudam seu comportamento:
+
+    <XPResultScreen
+      breakdown={{
+        total: 150,              // XP total ganho
+        accuracyPercent: 85,     // Porcentagem de acerto
+        streakBonus: 10,         // Bonus de streak
+      }}
+      currentXP={1250}           // XP atual do usuario
+      currentLevel={3}           // Nivel atual
+      previousLevel={2}          // Nivel anterior (se mudou, mostra modal)
+      onContinue={() => router.back()}  // O que fazer ao clicar "Continuar"
+    />
+
+  Para reutilizar: basta passar props diferentes.
+  O componente se adapta: mostra "Parabens!" ou "Vamos tentar novamente!"
+  dependendo se accuracyPercent >= 70.
+
+  ── CENARIO 5: Adicionar um novo dado no store ───────────────────────────────
+
+  1. Adicione a propriedade na interface:
+
+    interface UserState {
+      // ...existentes...
+      coins: number;  // NOVO
+    }
+
+  2. Adicione o valor inicial:
+
+    const INITIAL_STATE = {
+      // ...existentes...
+      coins: 0,
+    };
+
+  3. Adicione a acao (se necessario):
+
+    addCoins: (amount: number) => set((state) => ({ coins: state.coins + amount })),
+
+  4. Use em qualquer componente:
+
+    const coins = useUserStore((state) => state.coins);
+
+================================================================================
+  APENDICE A: ANATOMIA COMPLETA DE UM ARQUIVO DE TELA
+================================================================================
+
+  Toda tela do Dualingo segue esta estrutura (nesta ordem):
+
+    // ── IMPORTS ──────────────────────────────────────────────────────────────
+    import React, { useState, useEffect } from "react";       // React + hooks
+    import { View, Text, StyleSheet } from "react-native";    // Componentes nativos
+    import { router } from "expo-router";                     // Navegacao
+    import { SafeAreaView } from "react-native-safe-area-context"; // Notch
+    import Button from "../../components/ui/Button";           // Componentes nossos
+    import { Theme } from "../../constants/colors";            // Cores
+    import { useUserStore } from "../../store/userStore";      // Estado global
+    import * as someService from "../../services/someService"; // API
+
+    // ── CONSTANTES ───────────────────────────────────────────────────────────
+    const BASE_WIDTH = 393;
+
+    // ── COMPONENTE ───────────────────────────────────────────────────────────
+    export default function MinhaTelaScreen() {
+      // 1. Hooks de estado local
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+
+      // 2. Hooks de store global
+      const { username } = useUserStore();
+
+      // 3. useEffect para buscar dados ao montar
+      useEffect(() => {
+        someService.getData()
+          .then(setData)
+          .finally(() => setLoading(false));
+      }, []);
+
+      // 4. Funcoes de evento
+      function handlePress() {
+        router.push("/(app)/outra-tela");
+      }
+
+      // 5. Renderizacao (JSX)
+      return (
+        <View style={styles.root}>
+          <SafeAreaView style={styles.safeArea}>
+            <Text style={styles.title}>Ola, {username}</Text>
+            <Button label="Ir" onPress={handlePress} />
+          </SafeAreaView>
+        </View>
+      );
+    }
+
+    // ── ESTILOS ──────────────────────────────────────────────────────────────
+    const styles = StyleSheet.create({
+      root: { flex: 1, backgroundColor: Theme.screenBackground },
+      safeArea: { flex: 1, padding: 20 },
+      title: { color: Theme.text, fontSize: 24, fontWeight: "700" },
+    });
+
+================================================================================
+  APENDICE B: COMPONENTES NATIVOS MAIS USADOS
+================================================================================
+
+  View            -> Container (div). Nao renderiza texto diretamente.
+  Text            -> Exibe texto. Todo texto DEVE estar dentro de <Text>.
+  ScrollView      -> View com scroll. Usa quando o conteudo e maior que a tela.
+  FlatList        -> Lista otimizada. Usa para listas grandes (renderiza sob demanda).
+  TouchableOpacity -> Botao com fade ao tocar. Aceita onPress.
+  Pressable       -> Botao mais configuravel (detecta press in/out).
+  TextInput       -> Campo de texto (input).
+  Image           -> Exibe imagens.
+  Modal           -> Popup sobreposto a tela.
+  ActivityIndicator -> Spinner de loading.
+  KeyboardAvoidingView -> Empurra conteudo quando o teclado abre.
+  SafeAreaView    -> Respeita notch e barra de status (usar de react-native-safe-area-context).
+
+================================================================================
+  APENDICE C: HOOKS MAIS USADOS NO PROJETO
+================================================================================
+
+  useState(valorInicial)
+    -> Cria estado local. Retorna [valor, setValor].
+    -> Quando setValor e chamado, o componente re-renderiza.
+
+  useEffect(funcao, [dependencias])
+    -> Executa a funcao quando o componente monta ([] vazio)
+    -> Ou quando alguma dependencia muda ([dep1, dep2])
+    -> Usado para buscar dados do backend ao abrir a tela.
+
+  useCallback(funcao, [dependencias])
+    -> Memoriza uma funcao. Evita recriar a cada render.
+    -> Usado em funcoes passadas como prop para componentes filhos.
+
+  useMemo(funcao, [dependencias])
+    -> Memoriza um valor calculado. So recalcula quando dependencias mudam.
+    -> Usado para evitar processamento pesado a cada render.
+
+  useRef(valorInicial)
+    -> Cria uma referencia mutavel que nao causa re-render.
+    -> Usado para acessar ScrollView (scrollRef.current.scrollTo).
+
+  useWindowDimensions()
+    -> Retorna { width, height } da tela atual.
+    -> Atualiza automaticamente se a tela muda (rotacao, redimensionar).
+
+  useLocalSearchParams()
+    -> Pega parametros da URL no Expo Router.
+    -> Ex: router.push({params: {id: "123"}}) -> useLocalSearchParams() = {id: "123"}
+
+================================================================================
+  APENDICE D: COMANDOS UTEIS
+================================================================================
+
+  # Instalar dependencias
+  npm install
+
+  # Rodar o app (frontend)
+  npx expo start --clear
+
+  # Rodar o backend local
+  cd backend && npm run dev:local
+
+  # Instalar um pacote novo
+  npx expo install nome-do-pacote     (para pacotes expo-*)
+  npm install nome-do-pacote          (para pacotes normais)
+
+  # Limpar cache (quando algo nao funciona)
+  npx expo start --clear
+
+  # Ver no navegador
+  Pressione "w" no terminal do Expo
+
+  # Ver no celular
+  Escaneie o QR code com o app Expo Go
+
+
+================================================================================
+  SECAO EXTRA: BLOCOS DE 20 LINHAS COMENTADAS (LINHA A LINHA)
+================================================================================
+
+  Cada bloco abaixo e um trecho REAL do projeto Dualingo com exatamente
+  20 linhas de codigo. Cada linha tem um comentario explicando o que faz.
+
+================================================================================
+  BLOCO 1 — Imports da tela de login (app/(auth)/login.tsx, linhas 1-20)
+================================================================================
+
+    import React, { useState } from "react";            // L01: Importa React e o hook useState (controla valores que mudam na tela)
+    import {                                            // L02: Abre bloco de imports do React Native
+      KeyboardAvoidingView,                             // L03: Componente que empurra a tela para cima quando o teclado abre
+      Modal,                                            // L04: Componente de popup/overlay que aparece por cima da tela
+      Platform,                                         // L05: Detecta se o app esta rodando no iOS, Android ou Web
+      Pressable,                                        // L06: Area clicavel (usado no overlay do modal para fechar ao tocar fora)
+      ScrollView,                                       // L07: Container com scroll vertical (quando o conteudo nao cabe na tela)
+      StyleSheet,                                       // L08: Funcao que cria estilos otimizados (equivalente ao CSS)
+      Text,                                             // L09: Componente obrigatorio para exibir qualquer texto na tela
+      TouchableOpacity,                                 // L10: Botao que fica semi-transparente ao ser tocado (feedback visual)
+      useWindowDimensions,                              // L11: Hook que retorna a largura e altura da tela em tempo real
+      View,                                             // L12: Container basico — equivalente ao <div> do HTML
+    } from "react-native";                              // L13: Fecha o bloco de imports vindos da biblioteca react-native
+    import { router } from "expo-router";               // L14: Importa o router para navegar entre telas (push, replace, back)
+    import Button from "../../components/ui/Button";    // L15: Importa o botao reutilizavel criado pelo time (Design System)
+    import FadeSlideIn from "../../components/ui/FadeSlideIn"; // L16: Componente de animacao de entrada (fade + deslizar de baixo)
+    import Input from "../../components/ui/Input";      // L17: Importa o campo de texto reutilizavel (com modo texto/senha + erro)
+    import ScreenLoader from "../../components/ui/ScreenLoader"; // L18: Componente de tela de loading que aparece ao abrir a pagina
+    import { Theme } from "../../constants/colors";     // L19: Importa as cores do tema (fundo, texto, erro, marca, etc.)
+    import * as authService from "../../services/authService"; // L20: Importa todas as funcoes de autenticacao (login, register, forgot)
+
+
+================================================================================
+  BLOCO 2 — Estados do login (app/(auth)/login.tsx, linhas 45-64)
+================================================================================
+
+    const { width, height } = useWindowDimensions();    // L01: Pega a largura e altura da tela neste momento (atualiza se girar)
+    const scale = width / BASE_WIDTH;                   // L02: Calcula fator de escala (tela 786px / base 393 = escala 2x)
+    const rs = (size: number) => Math.round(size * scale); // L03: Funcao que multiplica qualquer tamanho pelo fator de escala
+    const isSmall = height < 700;                       // L04: Verifica se a tela e pequena (para reduzir padding)
+    const [pageReady, setPageReady] = useState(false);  // L05: Controla se a animacao de loading ja terminou
+    const [email, setEmail] = useState("");             // L06: Armazena o que o usuario digitou no campo de email
+    const [password, setPassword] = useState("");       // L07: Armazena o que o usuario digitou no campo de senha
+    const [emailError, setEmailError] = useState("");   // L08: Mensagem de erro do email (ex: "Email invalido")
+    const [passwordError, setPasswordError] = useState(""); // L09: Mensagem de erro da senha (ex: "Minimo 6 caracteres")
+    const [loginError, setLoginError] = useState("");   // L10: Erro geral do login (ex: "Credenciais incorretas")
+    const [loading, setLoading] = useState(false);      // L11: Se true, o botao mostra um spinner ao inves do texto
+    const [forgotModalVisible, setForgotModalVisible] = useState(false); // L12: Controla se o modal "Esqueci a senha" esta visivel
+    const [forgotEmail, setForgotEmail] = useState(""); // L13: Email digitado dentro do modal de recuperacao
+    const [forgotEmailError, setForgotEmailError] = useState(""); // L14: Erro do email dentro do modal
+    const [forgotSuccess, setForgotSuccess] = useState(false); // L15: Se true, mostra "Email enviado com sucesso!" no modal
+    const [forgotLoading, setForgotLoading] = useState(false); // L16: Controla spinner do botao "Enviar" no modal
+    function validateEmail(value: string) {             // L17: Funcao que verifica se um texto tem formato de email valido
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); // L18: Regex: precisa ter algo@algo.algo (sem espacos)
+    }                                                   // L19: Fecha a funcao validateEmail
+    function validate() {                               // L20: Funcao que valida TODOS os campos antes de enviar o formulario
+
+
+================================================================================
+  BLOCO 3 — Funcao handleLogin (app/(auth)/login.tsx, linhas 85-104)
+================================================================================
+
+    async function handleLogin() {                      // L01: Funcao assincrona que executa o login (async = pode usar await)
+      if (!validate()) return;                          // L02: Se a validacao falhar, para aqui (nao faz a requisicao)
+      setLoading(true);                                 // L03: Ativa o spinner no botao para mostrar que esta processando
+      try {                                             // L04: Bloco try — tenta executar o codigo abaixo
+        const trimmedEmail = email.trim().toLowerCase(); // L05: Remove espacos e converte para minusculo (evita erros)
+        const user = await authService.login({          // L06: Chama o backend (POST /auth/login) e espera a resposta
+          email: trimmedEmail,                          // L07: Envia o email tratado
+          password                                      // L08: Envia a senha como o usuario digitou
+        });                                             // L09: Fecha o objeto de credenciais passado ao login()
+        useUserStore.getState().hydrateFromUser(user);  // L10: Preenche o store global com os dados do usuario retornado
+        try {                                           // L11: Segundo try — tenta buscar gamificacao (nao e critico se falhar)
+          const gamification = await progressService.getGamification(); // L12: GET /gamification — busca XP, nivel, streak
+          useUserStore.getState().hydrateFromGamification(gamification); // L13: Atualiza XP/nivel/streak no store
+          useAchievementStore.getState().hydrateFromApi(gamification.achievements); // L14: Atualiza conquistas
+        } catch {                                       // L15: Se falhar, ignora silenciosamente (usa dados do login)
+        }                                               // L16: Fecha o catch interno
+        router.replace("/(app)/home");                  // L17: Navega para Home. replace = nao pode voltar para login
+      } catch (err: any) {                              // L18: Se o login falhar (senha errada, backend off, etc.)
+        setLoginError(err?.message ?? "Erro ao fazer login."); // L19: Exibe a mensagem de erro na tela
+      } finally {                                       // L20: finally = executa SEMPRE (sucesso ou erro)
+
+
+================================================================================
+  BLOCO 4 — JSX do formulario de login (app/(auth)/login.tsx, linhas 140-159)
+================================================================================
+
+    <KeyboardAvoidingView                               // L01: Componente que ajusta a tela quando o teclado aparece
+      style={styles.flex}                               // L02: Aplica estilo flex:1 (ocupa toda a tela)
+      behavior={Platform.OS === "ios" ? "padding" : "height"} // L03: iOS usa padding, Android usa height (comportamento diferente)
+    >                                                   // L04: Fecha as props do KeyboardAvoidingView
+      <ScrollView                                       // L05: Permite scroll se o conteudo for maior que a tela
+        contentContainerStyle={[                         // L06: Estilos aplicados ao conteudo INTERNO do scroll
+          styles.container,                             // L07: Estilo base (flexGrow:1, justifyContent: space-between)
+          { paddingHorizontal: rs(28), paddingTop: isSmall ? rs(100) : rs(160) } // L08: Padding responsivo (menor em telas pequenas)
+        ]}                                              // L09: Fecha o array de estilos
+        keyboardShouldPersistTaps="handled"             // L10: Permite clicar em botoes mesmo com teclado aberto
+      >                                                 // L11: Fecha as props do ScrollView
+        <FadeSlideIn delay={0} style={[styles.header, { marginBottom: isSmall ? rs(48) : rs(96) }]}> // L12: Animacao de entrada no header (delay=0 = imediato)
+          <Text style={styles.welcomeText}>Bem vindo de volta ao</Text> // L13: Texto de boas-vindas (branco, bold)
+          <Text style={[styles.brandText, { fontSize: rs(64) }]}>Dualingo</Text> // L14: Nome do app em cor azul destaque (tamanho responsivo)
+        </FadeSlideIn>                                  // L15: Fecha o componente de animacao do header
+        <View style={[styles.form, { gap: rs(16) }]}>  // L16: Container do formulario com espaco de 16px entre campos
+          <FadeSlideIn delay={80}>                      // L17: Animacao com 80ms de atraso (cria efeito cascata)
+            <Input                                      // L18: Componente Input reutilizavel (campo de email)
+              mode="text"                               // L19: Modo texto normal (nao esconde caracteres)
+              placeholder="Insira seu email"            // L20: Texto cinza que aparece quando o campo esta vazio
+
+
+================================================================================
+  BLOCO 5 — useEffect da CourseScreen (app/(app)/course.tsx, linhas 98-117)
+================================================================================
+
+    useEffect(() => {                                   // L01: Hook que executa quando o componente monta ou courseId muda
+      initCourse(resolvedCourseId);                     // L02: Inicializa o progresso local do curso (idempotente, pode chamar varias vezes)
+      const course = MOCK_COURSES[resolvedCourseId];    // L03: Busca os dados do curso (modulos + licoes) pelo ID
+      if (!course) return;                              // L04: Se o curso nao existe, para aqui (nao faz chamadas)
+      courseService.startCourse(resolvedCourseId).catch(() => {}); // L05: Inicia o curso no backend (se ja iniciou, ignora o erro 400)
+      for (const mod of course.modules) {               // L06: Loop: para cada modulo do curso
+        courseService.getModule(resolvedCourseId, mod.moduleId) // L07: Busca status real das licoes no backend (GET /courses/{id}/modules/{moduleId})
+          .then((moduleData) => {                       // L08: Se a requisicao deu certo, recebe os dados do modulo
+            const newOverrides: Record<string, Lesson["status"]> = {}; // L09: Cria objeto vazio para guardar os status
+            for (const lesson of moduleData.lessons) {  // L10: Loop: para cada licao retornada pelo backend
+              newOverrides[lesson.lessonId] = lesson.status; // L11: Salva o status (locked/available/completed) no objeto
+            }                                           // L12: Fecha o loop de licoes
+            useProgressStore.setState((state) => ({     // L13: Atualiza o progressStore com os novos status
+              overrides: {                              // L14: Objeto overrides guarda status vindos do backend
+                ...state.overrides,                     // L15: Mantem overrides de outros cursos intactos (spread)
+                [resolvedCourseId]: {                   // L16: Atualiza apenas o curso atual (computed property name)
+                  ...(state.overrides[resolvedCourseId] ?? {}), // L17: Mantem status ja salvos deste curso
+                  ...newOverrides,                      // L18: Sobrescreve com os novos status do backend
+                },                                      // L19: Fecha o objeto do curso atual
+              },                                        // L20: Fecha o objeto overrides
+
+
+================================================================================
+  BLOCO 6 — Renderizacao dos modulos (app/(app)/course.tsx, linhas 170-189)
+================================================================================
+
+    {courseData.modules.map((module, moduleIndex) => {   // L01: Itera sobre cada modulo do curso (map = transforma array em JSX)
+      const isExpanded = expandedModuleId === module.moduleId; // L02: Verifica se este modulo esta aberto (accordion)
+      const isModuleLocked = module.lessons.every(      // L03: Verifica se TODAS as licoes estao bloqueadas
+        (l) => lessonStatuses[l.lessonId] === "locked"  // L04: every() retorna true se TODAS atendem a condicao
+      );                                                // L05: Fecha a verificacao de modulo bloqueado
+      return (                                          // L06: Retorna o JSX deste modulo
+        <View key={module.moduleId} style={styles.moduleSection}> // L07: Container do modulo (key = identificador unico pro React)
+          <TouchableOpacity                             // L08: Header clicavel do modulo (abre/fecha o accordion)
+            style={styles.moduleHeader}                 // L09: Estilo: flexDirection row, centralizado, com padding
+            onPress={() => toggleModule(module.moduleId)} // L10: Ao clicar, alterna entre aberto e fechado
+            activeOpacity={0.8}                         // L11: Opacidade ao tocar (0.8 = leve feedback visual)
+          >                                             // L12: Fecha as props do TouchableOpacity
+            <View style={styles.moduleTitleBlock}>      // L13: Bloco com titulo e subtitulo do modulo (centralizado)
+              <Text style={[styles.moduleTitle, isModuleLocked && styles.moduleTitleLocked]}> // L14: "Modulo 1" — fica cinza se bloqueado
+                Modulo {moduleIndex + 1}                // L15: Numero do modulo (index comeca em 0, entao +1)
+              </Text>                                   // L16: Fecha o Text do titulo
+              <Text style={[styles.moduleSubtitle, isModuleLocked && styles.moduleSubtitleLocked]}> // L17: Nome do modulo (menor, mais transparente)
+                {module.name}                           // L18: Ex: "Fundamentos", "Navegacao", "APIs"
+              </Text>                                   // L19: Fecha o Text do subtitulo
+            </View>                                     // L20: Fecha o bloco de titulo
+
+
+================================================================================
+  BLOCO 7 — Zustand store completo (store/userStore.ts, linhas 70-89)
+================================================================================
+
+    export const useUserStore = create<UserState>((set) => ({ // L01: Cria o store global. "set" e a funcao que atualiza o estado
+      userId: undefined,                                // L02: ID do usuario (undefined = nao logado ainda)
+      username: "Username",                             // L03: Nome padrao antes do login
+      email: "",                                        // L04: Email vazio inicialmente
+      avatarUri: undefined,                             // L05: Sem foto de perfil inicialmente
+      role: "user" as UserRole,                         // L06: Role padrao e "user" (pode ser "admin")
+      level: 1,                                         // L07: Nivel inicial = 1
+      streak: 0,                                        // L08: Streak inicial = 0 (sem dias consecutivos)
+      currentXP: 0,                                     // L09: XP inicial = 0
+      nextLevelXP: 100,                                 // L10: XP necessario para o proximo nivel
+      setUsername: (name) => set({ username: name }),    // L11: Acao: atualiza so o nome (usado em settings)
+      setAvatarUri: (uri) => set({ avatarUri: uri }),    // L12: Acao: atualiza so o avatar (usado apos upload de foto)
+      hydrateFromUser: (user: User) => set({            // L13: Acao: preenche TUDO com dados do backend (pos-login)
+        userId: user.userId,                            // L14: ID retornado pelo backend
+        username: user.name,                            // L15: Nome do usuario
+        email: user.email,                              // L16: Email do usuario
+        avatarUri: user.avatarUrl,                      // L17: URL da foto de perfil (pode ser undefined)
+        role: user.role ?? "user",                      // L18: Role vinda do backend (se nao vier, assume "user")
+        level: user.level,                              // L19: Nivel atual do usuario
+        streak: user.streak,                            // L20: Dias consecutivos de estudo
+
+
+================================================================================
+  BLOCO 8 — Axios config + interceptor (services/api.ts, linhas 68-87)
+================================================================================
+
+    const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001"; // L01: URL do backend (vem do .env ou usa localhost como fallback)
+    console.log("[API] Base URL:", BASE_URL);            // L02: Log para debug — mostra no console qual URL esta sendo usada
+    export const TOKEN_KEYS = {                         // L03: Objeto com os nomes das chaves usadas no storage
+      ACCESS: "dualingo_access_token",                  // L04: Chave do token de acesso (enviado em cada requisicao)
+      REFRESH: "dualingo_refresh_token",                // L05: Chave do token de refresh (para renovar o access)
+      ID: "dualingo_id_token",                          // L06: Chave do token de identidade (dados do usuario)
+    } as const;                                         // L07: "as const" torna os valores readonly (nao podem ser alterados)
+    const api: AxiosInstance = axios.create({            // L08: Cria instancia do Axios com configuracao padrao
+      baseURL: BASE_URL,                                // L09: Todas as chamadas usam esta URL como prefixo (ex: BASE_URL + "/auth/login")
+      timeout: 10000,                                   // L10: Se o backend nao responder em 10s, da erro de timeout
+      headers: {                                        // L11: Headers padrao enviados em TODAS as requisicoes
+        "Content-Type": "application/json",             // L12: Diz ao backend que estamos enviando/recebendo JSON
+      },                                                // L13: Fecha o objeto headers
+    });                                                 // L14: Fecha o axios.create — api esta pronta para uso
+    api.interceptors.request.use(                       // L15: Registra interceptor de REQUEST (roda ANTES de cada chamada)
+      async (config: InternalAxiosRequestConfig) => {   // L16: Funcao assincrona que recebe a config da requisicao
+        const token = await getStorageItem(TOKEN_KEYS.ACCESS); // L17: Busca o token salvo no storage (SecureStore ou localStorage)
+        if (token && config.headers) {                  // L18: Se existe token E headers estao disponiveis
+          config.headers.Authorization = `Bearer ${token}`; // L19: Injeta o header "Authorization: Bearer <token>" automaticamente
+        }                                               // L20: Fecha o if — se nao tem token, a requisicao vai sem autenticacao
+
+
+================================================================================
+  BLOCO 9 — Componente Button (components/ui/Button.tsx, linhas 52-71)
+================================================================================
+
+    export default function Button({                    // L01: Exporta o componente Button como default (pode importar sem chaves)
+      label,                                            // L02: Desestrutura prop "label" — texto que aparece no botao
+      onPress,                                          // L03: Desestrutura prop "onPress" — funcao executada ao clicar
+      variant = "primary",                              // L04: Desestrutura prop "variant" com valor padrao "primary" (azul)
+      loading = false,                                  // L05: Desestrutura prop "loading" com valor padrao false
+      icon,                                             // L06: Desestrutura prop "icon" — icone opcional a esquerda do texto
+      fullWidth = true,                                 // L07: Desestrutura prop "fullWidth" — padrao true (ocupa 100% da largura)
+    }: ButtonProps) {                                   // L08: Tipagem das props (TypeScript garante que so aceita o que esta na interface)
+      const { width } = useWindowDimensions();          // L09: Pega a largura da tela para calcular responsividade
+      const [isPressed, setIsPressed] = useState(false); // L10: Estado que controla se o botao esta sendo pressionado agora
+      const scale = width / BASE_WIDTH;                 // L11: Calcula fator de escala (393px = 1x, 786px = 2x)
+      const rs = (size: number) => Math.round(size * scale); // L12: Funcao responsiva: aplica escala a qualquer valor numerico
+      const isDisabled = variant === "disabled" || loading; // L13: Botao esta desabilitado se variant="disabled" OU loading=true
+      const getButtonStyles = () => {                   // L14: Funcao que retorna estilos dinamicos baseado no estado
+        const base = { height: rs(56), borderRadius: 15, paddingHorizontal: rs(24), borderWidth: 2 }; // L15: Estilos base compartilhados
+        if (isDisabled) return { ...base, backgroundColor: "#32374A", borderColor: "#1B1B1B", opacity: 0.6 }; // L16: Desabilitado: cinza + transparente
+        if (variant === "secondary") return { ...base, backgroundColor: "#32374A", borderColor: "#1B1B1B" }; // L17: Secondary: cinza sem transparencia
+        if (isPressed) return { ...base, backgroundColor: "#32374A", borderColor: "#1B1B1B" }; // L18: Primary pressionado: muda para cinza
+        return { ...base, backgroundColor: "#093AFF", borderColor: "#0026BD" }; // L19: Primary normal: azul vibrante (estado padrao)
+      };                                                // L20: Fecha a funcao getButtonStyles
+
+
+================================================================================
+  BLOCO 10 — HomeScreen: lista de cursos e navegacao (app/(app)/home.tsx, linhas 76-95)
+================================================================================
+
+    useEffect(() => {                                   // L01: Hook que roda quando o componente monta (abre a tela)
+      if (isAdmin) return;                              // L02: Se for admin, nao busca gamificacao (admin nao joga)
+      progressService.getGamification()                 // L03: Faz GET /gamification no backend (busca XP, nivel, streak)
+        .then((data) => {                               // L04: Se a requisicao deu certo, recebe os dados atualizados
+          hydrate({                                     // L05: Atualiza o gamificationStore com os dados do backend
+            xp: data.xp,                                // L06: XP total do usuario
+            level: data.level,                          // L07: Nivel atual (1 a 5)
+            streak: data.streak,                        // L08: Dias consecutivos de estudo
+            lastStudyDate: data.lastStudyDate ?? null,  // L09: Data do ultimo estudo (para calcular streak)
+          });                                           // L10: Fecha a chamada hydrate
+          useUserStore.getState().hydrateFromGamification(data); // L11: Tambem atualiza o userStore (Header usa esses dados)
+          useAchievementStore.getState().hydrateFromApi(data.achievements); // L12: Atualiza as conquistas no achievementStore
+        })                                              // L13: Fecha o .then
+        .catch(() => {});                               // L14: Se falhar, ignora silenciosamente (usa dados do login)
+    }, []);                                             // L15: [] vazio = executa apenas UMA vez ao montar (nao re-executa)
+    function handleTabPress(tab: "home" | "progress" | "settings") { // L16: Funcao chamada ao clicar na navbar inferior
+      setActiveTab(tab);                                // L17: Atualiza a tab ativa visualmente (muda a cor do icone)
+      if (tab === "settings") router.push("/(app)/settings"); // L18: Se clicou em settings, navega para a tela de configuracoes
+      if (tab === "progress") router.push("/(app)/progress"); // L19: Se clicou em progress, navega para a tela de progresso
+    }                                                   // L20: Fecha a funcao handleTabPress
+
+
+================================================================================
+  BLOCO 11 — XPResultScreen: tela de resultado (components/XPResultScreen.tsx, linhas 32-51)
+================================================================================
+
+    export default function XPResultScreen({            // L01: Exporta o componente de resultado da licao
+      breakdown,                                        // L02: Objeto com detalhes do XP ganho (total, %, bonus)
+      currentXP,                                        // L03: XP atual do usuario apos completar a licao
+      currentLevel,                                     // L04: Nivel atual do usuario apos a licao
+      previousLevel,                                    // L05: Nivel que o usuario tinha ANTES da licao (para detectar level up)
+      onContinue,                                       // L06: Funcao chamada ao clicar "Continuar" (volta para a trilha)
+    }: XPResultScreenProps) {                           // L07: Tipagem das props via interface definida acima
+      const { rs } = useResponsiveScale();              // L08: Hook customizado que retorna a funcao de escala responsiva
+      const passed = breakdown.accuracyPercent >= 70;   // L09: Passou se acertou 70% ou mais (regra de negocio do app)
+      const didLevelUp = passed && currentLevel > previousLevel; // L10: Subiu de nivel se passou E o nivel aumentou
+      const [levelUpDismissed, setLevelUpDismissed] = useState(!didLevelUp); // L11: Controla se o modal de level up ja foi fechado
+      const accentColor = passed ? Colors.success : Colors.error; // L12: Verde se passou, vermelho se reprovou
+      const headline = passed ? "Parabens!" : "Vamos tentar novamente!"; // L13: Titulo muda conforme resultado
+      const subline = passed                            // L14: Subtitulo tambem muda conforme resultado
+        ? `Voce atingiu ${breakdown.accuracyPercent}%`  // L15: Se passou: mostra a porcentagem de acerto
+        : `Acertou ${breakdown.accuracyPercent}%`;      // L16: Se reprovou: mostra a porcentagem (mas com tom diferente)
+      return (                                          // L17: Inicia o retorno do JSX
+        <SafeAreaView style={styles.container} edges={["top", "left", "right", "bottom"]}> // L18: Container com safe area em todas as bordas
+          <LevelUpModal                                 // L19: Modal de "Subiu de nivel!" (so aparece se didLevelUp=true)
+            visible={didLevelUp && !levelUpDismissed}   // L20: Visivel se subiu de nivel E ainda nao fechou o modal
+
+
+================================================================================
+  BLOCO 12 — Estilos da CourseScreen (app/(app)/course.tsx, linhas 220-239)
+================================================================================
+
+    const styles = StyleSheet.create({                  // L01: Cria objeto de estilos otimizado pelo React Native
+      root: { flex: 1, backgroundColor: Theme.screenBackground }, // L02: Container raiz: ocupa tela toda, fundo escuro (#000721)
+      safeArea: { flex: 1, backgroundColor: Theme.screenBackground }, // L03: SafeArea com mesmo fundo (evita flash branco)
+      scroll: { flex: 1 },                             // L04: ScrollView ocupa todo o espaco disponivel
+      scrollContent: { paddingBottom: 16 },             // L05: Padding inferior para o conteudo nao ficar colado na navbar
+      xpBarWrapper: { alignSelf: "center", width: "60%", marginTop: 12, marginBottom: 12 }, // L06: Barra de XP centralizada, 60% da largura
+      progressLabel: { color: "#CC44FF", fontSize: 13, fontWeight: "700", textAlign: "center", marginBottom: 14 }, // L07: Label "Progress" roxa com glow
+      progressTrack: { height: 10, width: "100%", backgroundColor: "#1B1B1B", borderRadius: 5, overflow: "hidden" }, // L08: Trilho cinza da barra de progresso
+      progressFill: { height: "100%", backgroundColor: "#CC44FF", borderRadius: 5, minWidth: 4 }, // L09: Preenchimento roxo (largura = porcentagem)
+      progressPercent: { color: "#CC44FF", fontSize: 12, fontWeight: "600", marginTop: 4 }, // L10: Texto "85%" abaixo da barra
+      moduleSection: { marginTop: 4 },                  // L11: Espaco entre modulos (4px)
+      moduleHeader: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12 }, // L12: Header do modulo: horizontal, centralizado
+      moduleTitleBlock: { alignItems: "center", gap: 2 }, // L13: Bloco de titulo do modulo (centralizado, gap minimo)
+      moduleTitle: { color: "#FFFFFF", fontSize: 20, fontWeight: "700" }, // L14: "Modulo 1" em branco, grande, bold
+      moduleTitleLocked: { color: "rgba(255,255,255,0.3)" }, // L15: Override: se bloqueado, texto fica 30% opaco (cinza)
+      moduleSubtitle: { color: "rgba(255,255,255,0.55)", fontSize: 13, fontWeight: "400" }, // L16: Nome do modulo: menor, semi-transparente
+      moduleSubtitleLocked: { color: "rgba(255,255,255,0.2)" }, // L17: Override: se bloqueado, fica ainda mais transparente
+      errorText: { color: "#FFFFFF", fontSize: 16, textAlign: "center", marginTop: 40 }, // L18: Texto de erro centralizado ("Curso nao encontrado")
+    });                                                 // L19: Fecha o StyleSheet.create
+    // FIM DO ARQUIVO course.tsx                        // L20: Marca o final do arquivo
+
+
+================================================================================
+  BLOCO 13 — Storage adaptavel web/mobile (services/api.ts, linhas 16-35)
+================================================================================
+
+    let SecureStore: any = null;                        // L01: Variavel que vai guardar o modulo SecureStore (ou null na web)
+    if (Platform.OS !== "web") {                        // L02: Verifica se NAO estamos na web (estamos no celular)
+      SecureStore = require("expo-secure-store");       // L03: Importa expo-secure-store (armazenamento criptografado no celular)
+    }                                                   // L04: Fecha o if — na web, SecureStore continua null
+    export async function getStorageItem(key: string): Promise<string | null> { // L05: Funcao que busca um valor salvo (async porque pode demorar)
+      if (Platform.OS === "web") {                      // L06: Se estamos na web...
+        return localStorage.getItem(key);               // L07: ...usa localStorage do navegador (sincrono, mas funciona)
+      }                                                 // L08: Fecha o if web
+      return SecureStore?.getItemAsync(key) ?? null;    // L09: No celular: usa SecureStore (criptografado). Se nao existir, retorna null
+    }                                                   // L10: Fecha a funcao getStorageItem
+    export async function setStorageItem(key: string, value: string): Promise<void> { // L11: Funcao que SALVA um valor no storage
+      if (Platform.OS === "web") {                      // L12: Se estamos na web...
+        localStorage.setItem(key, value);               // L13: ...salva no localStorage
+        return;                                         // L14: Retorna (nao executa o codigo do celular abaixo)
+      }                                                 // L15: Fecha o if web
+      await SecureStore?.setItemAsync(key, value);      // L16: No celular: salva com SecureStore (criptografado)
+    }                                                   // L17: Fecha a funcao setStorageItem
+    export async function deleteStorageItem(key: string): Promise<void> { // L18: Funcao que REMOVE um valor do storage (usada no logout)
+      if (Platform.OS === "web") {                      // L19: Se estamos na web...
+        localStorage.removeItem(key);                   // L20: ...remove do localStorage
+
+
+================================================================================
+  BLOCO 14 — Layout raiz + Context Provider (app/_layout.tsx, completo)
+================================================================================
+
+    import { Stack } from "expo-router";                // L01: Importa Stack — gerencia navegacao em pilha (telas empilhadas)
+    import { SafeAreaProvider } from "react-native-safe-area-context"; // L02: Provider que calcula areas seguras (notch, barra status)
+    import { GamificationProvider } from "../store/gamificationStore"; // L03: Provider de gamificacao (disponibiliza XP/nivel para todo o app)
+    export default function RootLayout() {              // L04: Componente raiz — PRIMEIRO a ser renderizado quando o app abre
+      return (                                          // L05: Retorna o JSX
+        <SafeAreaProvider>                              // L06: Envolve tudo — qualquer filho pode usar useSafeAreaInsets()
+          <GamificationProvider>                        // L07: Envolve tudo — qualquer filho pode usar useGamification()
+            <Stack screenOptions={{ headerShown: false }}> // L08: Stack de navegacao. headerShown:false = sem header nativo
+              <Stack.Screen name="index" />             // L09: Tela inicial (app/index.tsx) — redireciona para login
+              <Stack.Screen name="(auth)" />            // L10: Grupo de auth — contem login.tsx e register.tsx
+              <Stack.Screen name="(app)" />             // L11: Grupo do app — contem home, course, question, etc.
+            </Stack>                                    // L12: Fecha o Stack
+          </GamificationProvider>                       // L13: Fecha o provider de gamificacao
+        </SafeAreaProvider>                             // L14: Fecha o SafeAreaProvider
+      );                                                // L15: Fecha o return
+    }                                                   // L16: Fecha a funcao RootLayout
+    // Este arquivo tem apenas 16 linhas significativas // L17: Comentario — layouts tendem a ser curtos
+    // A logica pesada fica nos componentes das telas   // L18: Os layouts so definem ESTRUTURA, nao logica
+    // Providers envolvem o app para compartilhar estado // L19: Qualquer dado que varias telas usam fica em um Provider
+    // Stack e a navegacao padrao mobile (pilha)        // L20: push = adiciona na pilha, back = remove, replace = substitui
+
+
+================================================================================
+  BLOCO 15 — Cores e tema centralizado (constants/colors.ts, linhas 1-20)
+================================================================================
+
+    export const Colors = {                             // L01: Exporta objeto com TODAS as cores do app (fonte unica de verdade)
+      primary: "#093AFF",                               // L02: Azul principal — botoes, links, destaques
+      primaryBorder: "#0026BD",                         // L03: Borda do botao primario (azul mais escuro)
+      primaryPressed: "#32374A",                        // L04: Cor quando o botao primario esta sendo pressionado (cinza)
+      primaryPressedBorder: "#1B1B1B",                  // L05: Borda quando pressionado
+      green: "#00DF21",                                 // L06: Verde — usado para XP, nivel, streak, sucesso
+      white: "#FFFFFF",                                 // L07: Branco — textos principais
+      black: "#000000",                                 // L08: Preto — pouco usado (fundo e screenBackground)
+      screenBackground: "#000721",                      // L09: Fundo de todas as telas (azul muito escuro)
+      headerBackground: "#32374A",                      // L10: Fundo do header (cinza escuro)
+      cardBackground: "#0D1B3E",                        // L11: Fundo dos cards (azul escuro)
+      inputBackground: "#FFFFFF",                       // L12: Fundo dos inputs (branco — contraste com fundo escuro)
+      modalBackground: "#0D1B3E",                       // L13: Fundo dos modais (mesmo azul dos cards)
+      inputBorder: "#E6E6E6",                           // L14: Borda dos inputs (cinza claro)
+      text: "#FFFFFF",                                  // L15: Cor padrao do texto (branco)
+      textMuted: "rgba(255,255,255,0.6)",               // L16: Texto secundario (branco 60% opaco)
+      error: "#FF3B30",                                 // L17: Vermelho — erros, validacao, resposta errada
+      success: "#22C55E",                               // L18: Verde — sucesso, resposta certa
+      warning: "#F97316",                               // L19: Laranja — alertas
+      overlay: "rgba(0,0,0,0.7)",                       // L20: Fundo escuro semi-transparente dos modais
+
+================================================================================
+  FIM DOS BLOCOS DE 20 LINHAS
+================================================================================
+
+
+================================================================================
+================================================================================
+  EXTRAS — CONCEITOS QUE PODEM CAIR NA PROVA
+================================================================================
+================================================================================
+
+
+================================================================================
+  EXTRA 1: REGRAS DE NEGOCIO DO DUALINGO
+================================================================================
+
+  ── DESBLOQUEIO PROGRESSIVO ──────────────────────────────────────────────────
+
+  As licoes seguem um sistema linear de desbloqueio:
+  - A primeira licao de cada curso comeca como "available" (disponivel)
+  - Todas as outras comecam como "locked" (bloqueadas)
+  - Ao completar uma licao com >= 70% de acerto, a PROXIMA e desbloqueada
+  - Se reprovou (< 70%), precisa refazer — nada desbloqueia
+
+  Codigo real que faz isso (progressStore.ts):
+
+    courseOverrides[lessonId] = "completed";       // Marca a licao atual como concluida
+    const next = allLessons[idx + 1];              // Pega a proxima licao na lista
+    if (next) {                                    // Se existe proxima...
+      const nextStatus = courseOverrides[next.lessonId] ?? next.status;
+      if (nextStatus === "locked") {               // Se ela esta bloqueada...
+        courseOverrides[next.lessonId] = "available"; // Desbloqueia
+      }
+    }
+
+  Modulo e considerado completo quando TODAS as licoes dele estao "completed".
+  Curso e considerado completo quando TODAS as licoes de TODOS os modulos estao "completed".
+
+  ── SISTEMA DE XP ────────────────────────────────────────────────────────────
+
+  XP base = (acertos / total de questoes) * 1000
+  Bonus de streak = +500 XP a cada 7 dias consecutivos (7, 14, 21, 28...)
+  XP total = base + streakBonus
+
+  Codigo real (gamificationStore.tsx):
+
+    function calculateXPGain(result: LessonResult): XPBreakdown {
+      const accuracyPercent = Math.round((result.correctAnswers / result.totalQuestions) * 100);
+      const base = Math.round((result.correctAnswers / result.totalQuestions) * 1000);
+      const streakBonus = result.streakDays % 7 === 0 ? 500 : 0;
+      return { base, streakBonus, total: base + streakBonus, accuracyPercent };
+    }
+
+  Exemplos:
+  - 10/10 acertos, streak dia 3  -> base=1000, bonus=0,   total=1000 XP
+  - 7/10 acertos, streak dia 7   -> base=700,  bonus=500, total=1200 XP
+  - 5/10 acertos, streak dia 1   -> base=500,  bonus=0,   total=500 XP
+  - 6/10 acertos (60% < 70%)     -> REPROVADO, nao ganha XP, nao desbloqueia
+
+  ── SISTEMA DE NIVEIS ────────────────────────────────────────────────────────
+
+  Nivel 1: 0 a 999 XP
+  Nivel 2: 1000 a 2499 XP
+  Nivel 3: 2500 a 4999 XP
+  Nivel 4: 5000 a 9999 XP
+  Nivel 5: 10000+ XP (maximo)
+
+  O nivel e calculado automaticamente a partir do XP total:
+
+    function calculateLevel(xp: number): number {
+      for (const [lvl, range] of Object.entries(LEVEL_THRESHOLDS)) {
+        if (xp >= range.min && xp <= range.max) return Number(lvl);
+      }
+      return 5; // Se passou de 10000, e nivel 5
+    }
+
+  ── SISTEMA DE STREAK ────────────────────────────────────────────────────────
+
+  Streak = dias CONSECUTIVOS em que o usuario completou pelo menos 1 licao.
+
+  Regras:
+  - Completou licao hoje e ontem -> streak + 1
+  - Completou licao hoje mas nao ontem -> streak reseta para 1
+  - Completou varias licoes no MESMO dia -> streak nao muda (ja contou)
+
+  Codigo real:
+
+    function updateStreak(currentStreak: number, lastStudyDate: string | null): number {
+      const today = toLocalDateString();
+      if (!lastStudyDate) return 1;              // Primeira vez estudando
+      if (lastStudyDate === today) return currentStreak; // Ja estudou hoje
+      const diffDays = /* calculo da diferenca em dias */;
+      if (diffDays === 1) return currentStreak + 1; // Estudou ontem -> incrementa
+      return 1;                                     // Pulou um dia -> reseta
+    }
+
+================================================================================
+  EXTRA 2: ARQUITETURA AWS (PRODUCAO)
+================================================================================
+
+  ── DIAGRAMA DE FLUXO ────────────────────────────────────────────────────────
+
+    App Expo (celular/web)
+        |
+        | HTTPS (JSON)
+        v
+    API Gateway (AWS)        <- Recebe as requisicoes HTTP
+        |
+        | Evento (request)
+        v
+    Lambda Functions (AWS)   <- Processa a logica (Node.js + TypeScript)
+        |
+        | SDK do AWS
+        v
+    DynamoDB (AWS)           <- Banco de dados NoSQL (persiste tudo)
+
+  Autenticacao:
+    App -> Cognito (AWS) -> JWT -> API Gateway valida o token -> Lambda executa
+
+  ── O QUE E CADA SERVICO ─────────────────────────────────────────────────────
+
+  API Gateway:
+  - Recebe requisicoes HTTP do app (GET, POST, PUT, DELETE)
+  - Roteia para a Lambda correta baseado no path e metodo
+  - Pode validar o token JWT antes de encaminhar (Cognito Authorizer)
+
+  Lambda:
+  - Funcao que roda sob demanda (nao tem servidor ligado 24h)
+  - Cada endpoint da API e uma funcao separada
+  - Escala automaticamente (10 usuarios ou 10.000, nao faz diferenca)
+  - Paga apenas pelo tempo de execucao (pay-per-use)
+
+  DynamoDB:
+  - Banco NoSQL da AWS (nao usa SQL, usa PK/SK para buscar dados)
+  - Latencia muito baixa (< 10ms)
+  - Escala automaticamente
+  - Modelo Single Table Design: TODAS as entidades ficam na MESMA tabela
+
+  Cognito:
+  - Gerencia usuarios (cadastro, login, recuperacao de senha)
+  - Emite tokens JWT apos o login
+  - O app envia o token em cada requisicao (header Authorization)
+  - API Gateway valida o token automaticamente
+
+  S3:
+  - Armazena arquivos estaticos (imagens dos cursos, avatares)
+  - Acesso via URL publica ou pre-signed URL
+
+  ── SERVERLESS FRAMEWORK ─────────────────────────────────────────────────────
+
+  O arquivo serverless.yml define TODA a infraestrutura como codigo:
+
+  provider:
+    - runtime: nodejs20.x     (versao do Node.js nas Lambdas)
+    - region: us-east-1       (regiao da AWS)
+    - stage: dev              (ambiente: dev, staging, prod)
+
+  functions:
+    - Cada funcao mapeia um handler (arquivo.funcao) para uma rota HTTP
+    - Exemplo: handler: dist/functions/admin/courses.create
+      events: http: path: admin/courses, method: post
+
+  resources:
+    - Define a tabela DynamoDB (PK, SK, GSI)
+    - BillingMode: PAY_PER_REQUEST (paga por uso, sem capacidade fixa)
+
+  Deploy: "serverless deploy" — cria tudo na AWS automaticamente.
+
+================================================================================
+  EXTRA 3: DYNAMODB — SINGLE TABLE DESIGN
+================================================================================
+
+  No DynamoDB, tudo fica em UMA tabela. O que diferencia as entidades
+  e a combinacao de PK (Partition Key) e SK (Sort Key).
+
+  Tabela: dualingo-backend-dev
+
+  ── MODELO DE DADOS ──────────────────────────────────────────────────────────
+
+    Entidade          PK                     SK
+    ──────────────    ─────────────────────  ─────────────────────────
+    Curso             COURSE#<courseId>       METADATA
+    Modulo            COURSE#<courseId>       MODULE#<moduleId>
+    Licao             MODULE#<moduleId>       LESSON#<lessonId>
+    Exercicio         LESSON#<lessonId>       EXERCISE#<exerciseId>
+    Usuario           USER#<userId>           PROFILE
+    Progresso         USER#<userId>           PROGRESS#<courseId>
+    Historico         USER#<userId>           HISTORY#<timestamp>
+    Conquista         USER#<userId>           ACHIEVEMENT#<id>
+
+  ── COMO FUNCIONA A BUSCA ────────────────────────────────────────────────────
+
+  Query por PK = busca TODOS os itens com aquela PK.
+
+  Exemplo: buscar todos os modulos do curso "expo":
+    PK = "COURSE#expo" -> retorna METADATA + todos os MODULE#<id>
+
+  Exemplo: buscar todas as licoes do modulo "fundamentos":
+    PK = "MODULE#fundamentos" -> retorna todos os LESSON#<id>
+
+  Exemplo: buscar perfil + progresso de um usuario:
+    PK = "USER#abc123" -> retorna PROFILE + PROGRESS#expo + PROGRESS#aws + ...
+
+  ── GSI (Global Secondary Index) ─────────────────────────────────────────────
+
+  GSI1: inverte PK e SK.
+  - Permite buscar "qual curso contem este modulo?"
+  - PK do GSI = SK original, SK do GSI = PK original
+
+  ── TIPOS TYPESCRIPT DO BACKEND ──────────────────────────────────────────────
+
+    interface Course {
+      PK: string;           // "COURSE#<courseId>"
+      SK: string;           // "METADATA"
+      courseId: string;      // ID unico do curso
+      name: string;         // Nome: "Expo" ou "AWS Nuvem"
+      description: string;  // Descricao do curso
+      order: number;        // Ordem de exibicao (1, 2, 3...)
+    }
+
+    interface Exercise {
+      PK: string;           // "LESSON#<lessonId>"
+      SK: string;           // "EXERCISE#<exerciseId>"
+      exerciseId: string;
+      lessonId: string;
+      type: "multiple_choice" | "true_false";  // Tipo do exercicio
+      question: string;     // Texto da pergunta
+      options: string[];    // Array com as opcoes (4 para multipla, 2 para V/F)
+      correctAnswer: string; // Resposta correta (deve estar em options)
+      explanation?: string; // Explicacao pos-resposta (opcional)
+    }
+
+  ── POR QUE SINGLE TABLE? ────────────────────────────────────────────────────
+
+  - Uma query traz tudo relacionado (curso + modulos, ou usuario + progresso)
+  - Menos chamadas ao banco = mais rapido
+  - DynamoDB cobra por leitura/escrita, menos queries = mais barato
+  - Desvantagem: modelagem mais complexa (precisa pensar bem nos patterns de acesso)
+
+================================================================================
+  EXTRA 4: CONTEXT API vs ZUSTAND — QUANDO USAR CADA UM
+================================================================================
+
+  O projeto usa DOIS sistemas de estado global. Parece redundante, mas
+  cada um tem um proposito diferente.
+
+  ── ZUSTAND (userStore, progressStore, achievementStore) ─────────────────────
+
+  - Sintaxe simples: create((set) => ({ ... }))
+  - NAO precisa de Provider (funciona em qualquer lugar, ate fora de componentes)
+  - Acesso direto: useUserStore.getState().reset()
+  - Ideal para: dados simples que nao tem logica complexa de transformacao
+
+  Exemplo (pode chamar de QUALQUER lugar):
+    useUserStore.getState().hydrateFromUser(user);   // Fora de componente
+    const name = useUserStore((s) => s.username);    // Dentro de componente
+
+  ── CONTEXT API (gamificationStore) ──────────────────────────────────────────
+
+  - Usa useReducer internamente (dispatch de actions, como Redux simplificado)
+  - PRECISA de Provider envolvendo a arvore (<GamificationProvider>)
+  - Ideal para: logica complexa com efeitos colaterais (calcular XP, streak, nivel)
+  - Permite useCallback para memorizar funcoes
+
+  Exemplo (so funciona dentro de componente filho do Provider):
+    const { state, completeLesson } = useGamification();
+    const breakdown = completeLesson(result);  // Calcula XP, atualiza streak, etc.
+
+  ── RESUMO ───────────────────────────────────────────────────────────────────
+
+    Zustand                          Context + useReducer
+    ──────────────────────────────   ──────────────────────────────
+    Simples (get/set direto)         Complexo (dispatch actions)
+    Nao precisa de Provider          Precisa de Provider na arvore
+    Funciona fora de componentes     So dentro da arvore do Provider
+    Bom para CRUD simples            Bom para logica com calculos
+    Re-render granular (selector)    Re-render de todos os consumers
+
+================================================================================
+  EXTRA 5: PROPS vs STATE — A DIFERENCA FUNDAMENTAL
+================================================================================
+
+  STATE (useState):
+  - Dados INTERNOS do componente (ele mesmo cria e modifica)
+  - Muda ao longo do tempo (input do usuario, loading, erros)
+  - Quando muda, o componente re-renderiza
+
+    function LoginScreen() {
+      const [email, setEmail] = useState("");  // STATE: pertence a esta tela
+      // setEmail("novo@email.com") -> re-renderiza com o novo valor
+    }
+
+  PROPS (propriedades):
+  - Dados que o componente RECEBE do pai (somente leitura)
+  - O componente NAO pode modificar suas proprias props
+  - Se as props mudam, o componente re-renderiza
+
+    function Button({ label, onPress }: ButtonProps) {  // PROPS: recebidas do pai
+      // label e onPress sao somente leitura aqui dentro
+      // quem decide o valor e o COMPONENTE PAI
+    }
+
+    // Pai define as props:
+    <Button label="Login" onPress={handleLogin} />
+
+  REGRA:
+  - Se o dado e CRIADO neste componente -> useState (state)
+  - Se o dado VEM de fora (do pai) -> props
+  - Se o dado e compartilhado entre varias telas -> Zustand/Context (store global)
+
+================================================================================
+  EXTRA 6: CICLO DE VIDA DO COMPONENTE (useEffect)
+================================================================================
+
+  Componentes React tem 3 momentos principais:
+
+  MOUNT (montou)    — componente apareceu na tela pela primeira vez
+  UPDATE (atualizou) — algum state ou prop mudou, componente re-renderiza
+  UNMOUNT (desmontou) — componente saiu da tela (navegou para outra pagina)
+
+  useEffect simula esses 3 momentos:
+
+    // Executa ao MONTAR (equivalente a componentDidMount)
+    useEffect(() => {
+      fetchData();        // Busca dados do backend ao abrir a tela
+    }, []);               // [] vazio = so roda uma vez
+
+    // Executa ao MONTAR e quando "courseId" MUDA (equivalente a componentDidUpdate)
+    useEffect(() => {
+      fetchCourse(courseId);
+    }, [courseId]);        // Roda quando courseId muda
+
+    // Executa ao DESMONTAR (cleanup — equivalente a componentWillUnmount)
+    useEffect(() => {
+      const timer = setInterval(tick, 1000);  // Cria um timer
+      return () => {                          // Funcao de CLEANUP
+        clearInterval(timer);                 // Limpa o timer ao sair da tela
+      };
+    }, []);
+
+  No Dualingo, useEffect e usado para:
+  - Buscar dados do backend ao abrir a tela (HomeScreen, CourseScreen)
+  - Sincronizar estado local com dados do store global
+  - Scroll automatico ate a proxima licao disponivel
+
+================================================================================
+  EXTRA 7: FLUXO COMPLETO DE AUTENTICACAO (JWT)
+================================================================================
+
+  1. Usuario digita email + senha na tela de login
+  2. App envia POST /auth/login { email, password } para o backend
+  3. Backend verifica credenciais no banco (ou Cognito)
+  4. Se correto, backend gera um TOKEN JWT e retorna junto com os dados do usuario
+  5. App salva o token no SecureStore (celular) ou localStorage (web)
+  6. Em TODAS as proximas requisicoes, o interceptor do Axios injeta:
+       Authorization: Bearer <token>
+  7. Backend recebe a requisicao, valida o token, identifica o usuario
+  8. Se o token expirou (401), o interceptor limpa o storage -> forca novo login
+
+  O que e um JWT:
+  - JSON Web Token — string codificada com 3 partes: header.payload.signature
+  - O payload contem: userId, email, role, expiration
+  - A signature garante que ninguem alterou o conteudo (assinado com chave secreta)
+  - O backend NUNCA confia no que o app envia — sempre valida o token
+
+  No projeto local (desenvolvimento):
+  - O backend Express gera o JWT com a chave do .env (JWT_SECRET)
+  - Nao usa Cognito (simplificado para desenvolvimento)
+
+  Em producao:
+  - Cognito gera e valida os tokens automaticamente
+  - API Gateway tem um "Cognito Authorizer" que rejeita tokens invalidos
+    antes mesmo de chegar na Lambda
+
+================================================================================
+  EXTRA 8: RENDERIZACAO CONDICIONAL — PADROES
+================================================================================
+
+  Tres formas de renderizar algo condicionalmente no JSX:
+
+  1. OPERADOR && (renderiza se true, nada se false):
+
+    {error && <Text style={styles.error}>{error}</Text>}
+    // Se error = "" (vazio/falsy), nao renderiza nada
+    // Se error = "Email invalido", renderiza o Text
+
+  2. TERNARIO (renderiza uma coisa OU outra):
+
+    {loading ? (
+      <ActivityIndicator />     // Se loading=true, mostra spinner
+    ) : (
+      <Text>{label}</Text>      // Se loading=false, mostra texto
+    )}
+
+  3. EARLY RETURN (se condicao, para o componente inteiro):
+
+    if (!courseData) {
+      return <Text>Curso nao encontrado</Text>;  // Retorna cedo, nao renderiza o resto
+    }
+    // ... resto do componente so executa se courseData existe
+
+  4. NULL (renderiza nada explicitamente):
+
+    {error ? <Text>{error}</Text> : null}
+    // Equivalente ao &&, mas mais explicito
+
+================================================================================
+  EXTRA 9: TYPESCRIPT BASICO USADO NO PROJETO
+================================================================================
+
+  ── INTERFACE (define a forma de um objeto) ──────────────────────────────────
+
+    interface ButtonProps {
+      label: string;          // Obrigatorio: deve ser uma string
+      onPress?: () => void;   // Opcional (?): funcao que nao retorna nada
+      loading?: boolean;      // Opcional: pode ser true ou false
+    }
+
+  ── TYPE (alternativa a interface, mais flexivel) ────────────────────────────
+
+    type LessonStatus = "locked" | "available" | "completed";  // Union type
+    type ExerciseType = "multiple_choice" | "true_false";
+
+  ── GENERICS (tipo parametrizado) ────────────────────────────────────────────
+
+    const [email, setEmail] = useState<string>("");   // useState que guarda string
+    const [users, setUsers] = useState<User[]>([]);   // useState que guarda array de User
+    create<UserState>((set) => ({ ... }));             // Store tipado como UserState
+
+  ── OPERADOR ? (opcional) ────────────────────────────────────────────────────
+
+    interface User {
+      name: string;          // Obrigatorio
+      avatarUrl?: string;    // Opcional — pode ser string ou undefined
+    }
+
+    const url = user.avatarUrl ?? "default.png";  // Se undefined, usa "default.png"
+
+  ── AS CONST (valores readonly) ──────────────────────────────────────────────
+
+    export const TOKEN_KEYS = {
+      ACCESS: "dualingo_access_token",
+    } as const;
+    // TOKEN_KEYS.ACCESS nao pode ser alterado em runtime (TypeScript garante)
+
+  ── RECORD (objeto com chaves/valores tipados) ───────────────────────────────
+
+    Record<string, LessonStatus>
+    // Significa: objeto onde as chaves sao string e os valores sao LessonStatus
+    // Equivalente a: { [key: string]: "locked" | "available" | "completed" }
+
+================================================================================
+  EXTRA 10: ASYNC/AWAIT vs .THEN() — QUANDO USAR CADA UM
+================================================================================
+
+  As duas formas fazem a MESMA coisa: lidam com operacoes assincronas (que demoram).
+
+  ── .then() — encadeia callbacks ─────────────────────────────────────────────
+
+    progressService.getGamification()
+      .then((data) => {
+        hydrate(data);              // Executa se deu certo
+      })
+      .catch((err) => {
+        console.error(err);         // Executa se deu erro
+      })
+      .finally(() => {
+        setLoading(false);          // Executa SEMPRE (sucesso ou erro)
+      });
+
+    Quando usar: chamadas simples em useEffect, quando nao precisa de try/catch
+    elaborado. O useEffect NAO pode ser async, entao .then() e mais natural.
+
+  ── async/await — parece codigo sincrono ─────────────────────────────────────
+
+    async function handleLogin() {
+      try {
+        const user = await authService.login({ email, password }); // Espera terminar
+        router.replace("/(app)/home");                             // So executa depois
+      } catch (err: any) {
+        setLoginError(err.message);                                // Se der erro
+      } finally {
+        setLoading(false);                                         // Sempre executa
+      }
+    }
+
+    Quando usar: funcoes de evento (handleLogin, handleSubmit) onde voce
+    precisa de varias operacoes sequenciais (login -> hydrate -> navigate).
+
+  ── REGRA DO PROJETO ─────────────────────────────────────────────────────────
+
+    useEffect -> usa .then() (porque useEffect nao pode ser async)
+    Funcoes de evento (handle*) -> usa async/await (mais legivel)
